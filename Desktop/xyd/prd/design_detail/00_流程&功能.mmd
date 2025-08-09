@@ -1,0 +1,101 @@
+ graph TB
+      subgraph "用户入口"
+          A[用户登录/注册] --> B[选择关系类型]
+          B --> B1[情侣关系]
+          B --> B2[亲子关系]
+          B --> B3[健身伙伴]
+          B --> B4[读书会]
+      end
+
+      subgraph "约定创建流程"
+          B1 & B2 & B3 & B4 --> C[创建约定]
+          C --> C1[选择模板/自定义]
+          C1 --> C2[AI辅助输入]
+          C2 --> C3[设定执行模式]
+          C3 --> C31[软提醒模式]
+          C3 --> C32[硬执行模式]
+          C31 & C32 --> C4[邀请参与者]
+          C4 --> C5[邀请见证人]
+          C5 --> D[保存草稿]
+      end
+
+      subgraph "约定状态管理"
+          D --> E[发送邀请]
+          E --> F{待确认}
+          F -->|全员确认| G[进行中]
+          F -->|拒绝| D
+          F -->|超时72h| Z1[已失效]
+
+          G --> G1[执行打卡]
+          G --> G2[上传证据]
+          G --> G3[申请暂停]
+          G --> G4[申请延期]
+
+          G3 --> H[暂停状态]
+          H -->|恢复| G
+          H -->|超期| I[已失败]
+
+          G1 & G2 --> J{完成判定}
+          J -->|完成| K[已完成]
+          J -->|未完成| I
+          J -->|协商终止| L[已终止]
+      end
+
+      subgraph "执行与见证"
+          G --> M[每日提醒]
+          M --> N[用户打卡]
+          N --> O[上传证据]
+          O --> O1[图片证据]
+          O --> O2[文字说明]
+          O --> O3[语音记录]
+          O --> O4[位置打卡]
+          O1 & O2 & O3 & O4 --> P[见证人验证]
+          P --> Q[见证人反馈]
+          Q --> R[点赞/鼓励]
+      end
+
+      subgraph "数据与统计"
+          K --> S[计入履约分]
+          I --> S1[扣减履约分]
+          S & S1 --> T[关系数据更新]
+          T --> T1[甜蜜指数]
+          T --> T2[成长树]
+          T --> T3[能量值]
+          T --> T4[知识图谱]
+          T1 & T2 & T3 & T4 --> U[生成报告]
+      end
+
+      subgraph "AI功能集成"
+          AI[AI助手] --> AI1[语音转文字]
+          AI --> AI2[自然语言结构化]
+          AI --> AI3[模板推荐]
+          AI --> AI4[关系识别]
+          AI --> AI5[冲突检测]
+          AI1 & AI2 & AI3 & AI4 & AI5 -.-> C2
+      end
+
+      subgraph "通知系统"
+          NT[通知中心] --> NT1[执行提醒]
+          NT --> NT2[到期预警]
+          NT --> NT3[见证反馈]
+          NT --> NT4[状态变更]
+          NT1 & NT2 & NT3 & NT4 -.-> M
+      end
+
+      subgraph "数据同步"
+          DS[数据同步] --> DS1[本地SQLite]
+          DS --> DS2[云端备份]
+          DS1 <--> DS2
+          DS --> DS3[冲突解决]
+          DS3 --> DS4[版本向量时钟]
+      end
+
+      K --> V[完成证书]
+      V --> W[分享成就]
+      W --> X[社交传播]
+
+      style A fill:#f9f,stroke:#333,stroke-width:4px
+      style G fill:#bbf,stroke:#333,stroke-width:2px
+      style K fill:#bfb,stroke:#333,stroke-width:2px
+      style I fill:#fbb,stroke:#333,stroke-width:2px
+      style AI fill:#ff9,stroke:#333,stroke-width:2px

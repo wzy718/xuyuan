@@ -1,0 +1,35 @@
+  graph TB
+      subgraph "现代化交互流程"
+          Start[开始] --> InitialInput[语音/文字输入]
+
+          InitialInput --> AIProcess[AI实时处理]
+          AIProcess --> ShowParsed[卡片展示解析结果]
+
+          ShowParsed --> Question1[问题1 + 快捷选项]
+          Question1 --> Select1{用户选择}
+          Select1 -->|点击选项| Quick1[快速选择]
+          Select1 -->|自定义| Custom1[展开输入框]
+
+          Quick1 & Custom1 --> Question2[问题2 + 智能推荐]
+          Question2 --> Select2{用户操作}
+          Select2 -->|选择| Quick2[确认选择]
+          Select2 -->|跳过| Skip2[使用默认值]
+
+          Quick2 & Skip2 --> Preview[预览卡片]
+          Preview --> ShowMilestones[显示自动生成的里程碑]
+          ShowMilestones --> ShowTodos[显示TODO列表]
+
+          ShowTodos --> FinalConfirm{最终确认}
+          FinalConfirm -->|满意| Create[创建约定]
+          FinalConfirm -->|修改| QuickEdit[快速编辑]
+          FinalConfirm -->|重来| Start
+      end
+
+      subgraph "UI特性"
+          F1[毛玻璃效果]
+          F2[弹性动画]
+          F3[智能键盘]
+          F4[手势操作]
+          F5[深色模式]
+          F6[无障碍支持]
+      end
