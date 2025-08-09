@@ -1,35 +1,69 @@
-# 开发指南
+# 小约定App开发指南
 
-## 环境搭建
+## 📋 项目状态
 
-### 系统要求
+✅ **P0立即执行任务已完成** (2025-08-09)
+- [x] 目录结构补全
+- [x] 跨端适配层实现（platform.ts, storage.ts, request.ts）
+- [x] Webpack 5构建缓存启用
+- [x] RN端基础设施配置（metro.config.js, babel.config.js）
+- [x] AI API集成架构（统一后端网关，移除云函数依赖）
+- [x] 基础Hooks和TypeScript类型定义
+
+## 🚀 快速开始
+
+### 环境要求
 - Node.js >= 16.0.0
 - npm >= 7.0.0
-- 微信开发者工具（最新版）
+- 微信开发者工具（小程序开发）
+- React Native环境（RN开发，可选）
 
-### 安装步骤
+### 依赖安装
 
+**推荐方式（使用安装脚本）：**
 ```bash
-# 1. 克隆项目
-git clone [repository-url]
-cd xyd
+./scripts/install-deps.sh
+```
+
+**手动安装：**
+```bash
+# 1. 修复npm权限（如果遇到权限问题）
+sudo chown -R $(whoami) ~/.npm
 
 # 2. 安装依赖
-npm install
+npm install --legacy-peer-deps
 
-# 3. 安装Taro CLI
-npm install -g @tarojs/cli
-
-# 4. 检查环境
-taro info
-
-# 5. React Native额外配置
-# iOS
-cd ios && pod install
-
-# Android - 配置gradle.properties加速
-echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m" >> android/gradle.properties
+# 3. 验证安装
+npm run build:h5  # 测试H5构建
 ```
+
+### 开发命令
+
+```bash
+# 微信小程序
+npm run dev:weapp    # 开发模式
+npm run build:weapp  # 构建
+
+# H5网页  
+npm run dev:h5       # 开发模式
+npm run build:h5     # 构建
+
+# React Native（可选）
+npm run dev:rn       # 开发模式
+npm run build:rn     # 构建
+```
+
+### 代码质量工具
+
+```bash
+npm run lint         # ESLint检查
+npm run lint:fix     # 自动修复
+npm run format       # Prettier格式化  
+npm run test         # 运行测试
+npm run test:coverage # 测试覆盖率
+```
+
+## 环境搭建
 
 ### React Native环境配置
 
