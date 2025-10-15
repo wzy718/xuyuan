@@ -1,5 +1,4 @@
 # Repository Guidelines
-使用中文
 
 ## Project Structure & Module Organization
 Application code lives in `src/app`, following the Next.js App Router (e.g., `src/app/page.tsx`, `src/app/product/page.tsx`). Shared UI resides in `src/components`, global styles in `src/app/globals.css`, and static assets in `public/`. Keep legal copy updates scoped to the `terms` and `privacy` route folders to simplify review.
