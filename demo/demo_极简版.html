@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>拜拜 Demo（极简版）</title>
+  <style>
+    :root { --fg:#111; --muted:#666; --bg:#fafafa; --card:#fff; --bd:#e6e6e6; --good:#0a7a2a; --bad:#b00020; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Arial,sans-serif; color:var(--fg); background:var(--bg); }
+    header{ padding:16px; border-bottom:1px solid var(--bd); background:#fff; position:sticky; top:0; z-index:10; }
+    header h1{ margin:0; font-size:18px; }
+    header p{ margin:6px 0 0; color:var(--muted); font-size:13px; line-height:1.4; }
+    .wrap{ max-width:980px; margin:0 auto; padding:16px; display:grid; gap:14px; grid-template-columns: 1fr; }
+    .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+    h2{ margin:0 0 10px; font-size:16px; }
+    label{ display:block; margin:10px 0 6px; font-size:13px; color:var(--muted); }
+    textarea, input, select{ width:100%; border:1px solid var(--bd); border-radius:12px; padding:10px; font-size:14px; background:#fff; }
+    textarea{ min-height:120px; resize:vertical; }
+    .btns{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    button{ border:1px solid var(--bd); background:#111; color:#fff; padding:10px 12px; border-radius:12px; cursor:pointer; font-size:14px; }
+    button.secondary{ background:#fff; color:#111; }
+    button.ghost{ background:transparent; color:#111; }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    .pill{ display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border:1px solid var(--bd); border-radius:999px; font-size:12px; color:var(--muted); background:#fff; }
+    .grid{ display:grid; gap:10px; grid-template-columns: 1fr; }
+    @media (min-width: 860px){ .wrap{ grid-template-columns: 1.05fr .95fr; } }
+    @media (min-width: 560px){ .grid.two{ grid-template-columns: 1fr 1fr; } }
+    ul, ol{ margin:8px 0 0; padding-left:18px; }
+    .muted{ color:var(--muted); }
+    .locked{ position:relative; border:1px dashed var(--bd); border-radius:12px; padding:10px; background:#fcfcfc; }
+    .locked .blur{ filter: blur(4px); user-select:none; pointer-events:none; }
+    .lockOverlay{
+      position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:center;
+      gap:10px; padding:14px; text-align:center;
+      background:rgba(255,255,255,.72); border-radius:12px;
+    }
+    .lockOverlay b{ font-size:14px; }
+    .fine{ font-size:12px; color:var(--muted); line-height:1.4; }
+    .todoRow{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:10px; border:1px solid var(--bd); border-radius:12px; background:#fff; }
+    .todoLeft{ display:flex; gap:10px; align-items:flex-start; }
+    .todoTitle{ font-size:14px; line-height:1.3; }
+    .tag{ display:inline-block; margin-top:6px; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--bd); color:var(--muted); }
+    .tag.good{ color:var(--good); border-color:rgba(10,122,42,.25); }
+    .tag.bad{ color:var(--bad); border-color:rgba(176,0,32,.25); }
+    .floatingPlus{
+      position:fixed; right:16px; bottom:16px; width:54px; height:54px; border-radius:999px;
+      border:1px solid var(--bd); background:#111; color:#fff; font-size:28px; line-height:0;
+      box-shadow:0 8px 24px rgba(0,0,0,.12); cursor:pointer;
+    }
+
+    /* Modal */
+    .modalBackdrop{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+    .modal{ width:min(720px, 100%); background:#fff; border:1px solid var(--bd); border-radius:16px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,.18); }
+    .modalHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+    .modalHeader h3{ margin:0; font-size:16px; }
+    .x{ border:1px solid var(--bd); background:#fff; color:#111; border-radius:10px; padding:6px 10px; cursor:pointer; }
+    .divider{ height:1px; background:var(--bd); margin:10px 0; }
+    .notice{ margin-top:10px; font-size:12px; color:var(--muted); line-height:1.4; }
+    .mono{ white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>拜拜 Demo（极简版）</h1>
+    <p>主屏只有一句：<b>最近许过什么愿？如果没成功我来分析原因！</b>（本页为前端模拟；“看广告/分享”只做演示解锁。）</p>
+  </header>
+
+  <main class="wrap">
+    <!-- Left: main input + result -->
+    <section class="card">
+      <h2>最近许过什么愿？如果没成功我来分析原因！ <span class="pill" id="status">未解锁正确姿势</span></h2>
+
+      <label>请输入你最近许过但没成功的愿望（或你觉得卡住的愿望）</label>
+      <textarea id="wishInput" placeholder="例如：我想发财、我想一切顺利、我想他回来找我……"></textarea>
+
+      <div class="btns">
+        <button id="analyzeBtn">开始分析</button>
+        <button id="copyBtn" class="secondary" disabled>复制正确姿势</button>
+        <button id="resetBtn" class="secondary">清空</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="grid two">
+        <div>
+          <h2 style="margin-top:0;">缺失要素</h2>
+          <ul id="missingList"></ul>
+        </div>
+        <div>
+          <h2 style="margin-top:0;">潜在原因</h2>
+          <ul id="reasonList"></ul>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h2 style="margin-top:0;">正确姿势（解锁后可见）</h2>
+      <div class="locked" id="lockedBox">
+        <div class="blur" id="lockedContent">
+          <div class="mono" id="optimizedText">（这里会显示优化后的许愿稿）</div>
+          <div class="divider"></div>
+          <b>建议补齐字段（示例）</b>
+          <ul id="structuredSuggest"></ul>
+          <div class="divider"></div>
+          <b>建议步骤</b>
+          <ol id="stepList"></ol>
+          <p class="notice">免责声明：本工具仅提供表达与流程建议，不保证任何结果；请保持理性、合法合规。</p>
+        </div>
+
+        <div class="lockOverlay" id="lockOverlay">
+          <b>要看「正确姿势」吗？</b>
+          <div class="btns" style="justify-content:center;">
+            <button id="unlockAdBtn">看广告解锁</button>
+            <button id="unlockShareBtn" class="secondary">分享解锁</button>
+          </div>
+          <div class="fine">演示版：点击即解锁（线上版需接入激励视频/分享回调）。</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right: TODO list -->
+    <aside class="card">
+      <h2>我的愿望（TODO）</h2>
+      <p class="muted" style="margin-top:6px;">把愿望记下来，成功就勾选。勾选成功后会弹 1 元代许愿提示（演示）。</p>
+      <div id="todoList"></div>
+      <p class="notice">提示：Demo 使用本地存储（localStorage）。</p>
+    </aside>
+  </main>
+
+  <button class="floatingPlus" id="plusBtn" title="再许一个愿">+</button>
+
+  <!-- Add Wish Modal -->
+  <div class="modalBackdrop" id="addModal">
+    <div class="modal">
+      <div class="modalHeader">
+        <h3>再许一个愿（结构化记录）</h3>
+        <button class="x" id="closeAdd">关闭</button>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label>对象（必填）</label>
+          <select id="mDeity">
+            <option value="观音菩萨">观音菩萨</option>
+            <option value="阿弥陀佛">阿弥陀佛</option>
+            <option value="文殊菩萨">文殊菩萨</option>
+            <option value="地藏菩萨">地藏菩萨</option>
+            <option value="太岁">太岁</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+        <div>
+          <label>时间范围（建议）</label>
+          <input id="mTime" placeholder="例如：3 个月内 / 2026 年内" />
+        </div>
+      </div>
+
+      <label>愿望原文（必填）</label>
+      <textarea id="mWish" placeholder="例如：希望 3 个月内找到更合适的工作，薪资达到……"></textarea>
+
+      <div class="grid two">
+        <div>
+          <label>目标量化（建议）</label>
+          <input id="mMetric" placeholder="例如：税后月收入≥X / 成绩≥X" />
+        </div>
+        <div>
+          <label>方式边界（建议）</label>
+          <input id="mBoundary" placeholder="例如：合法合规、不伤害他人、不以灾祸换钱" />
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div>
+          <label>行动承诺（建议）</label>
+          <input id="mAction" placeholder="例如：每天学习 2 小时、每周投递 10 份简历" />
+        </div>
+        <div>
+          <label>还愿/回向（可选）</label>
+          <input id="mVow" placeholder="例如：布施、供灯、帮助家人、捐赠" />
+        </div>
+      </div>
+
+      <div class="btns">
+        <button id="saveWishBtn">确认记录</button>
+        <button id="aiOptimizeBtn" class="secondary">一键 AI 优化（需解锁）</button>
+      </div>
+
+      <p class="notice">说明：真实小程序中，“AI 优化”将把上述字段与原文一起发给后端模型输出。</p>
+    </div>
+  </div>
+
+  <!-- Success upsell modal -->
+  <div class="modalBackdrop" id="payModal">
+    <div class="modal">
+      <div class="modalHeader">
+        <h3>已成功 🎉</h3>
+        <button class="x" id="closePay">关闭</button>
+      </div>
+      <p style="margin:6px 0 0;">恭喜！要不要付 <b>1 元</b>让别人替你许愿/还愿回向？</p>
+
+      <div class="divider"></div>
+
+      <label>对象</label>
+      <input id="pDeity" />
+
+      <label>许愿稿（可编辑）</label>
+      <textarea id="pText" class="mono"></textarea>
+
+      <label>备注（可选）</label>
+      <input id="pNote" placeholder="例如：希望在某个时间段、某个地点代许愿" />
+
+      <div class="btns">
+        <button id="payBtn">1 元代许愿（演示支付）</button>
+        <button id="noPayBtn" class="secondary">暂不需要</button>
+      </div>
+
+      <p class="notice">免责声明：代许愿为服务行为，提供过程记录，不承诺结果。</p>
+    </div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  const STORAGE_KEY = "baibai_todo_v1";
+  const UNLOCK_KEY = "baibai_unlocked_v1";
+
+  let unlocked = localStorage.getItem(UNLOCK_KEY) === "1";
+
+  function setUnlocked(v){
+    unlocked = v;
+    localStorage.setItem(UNLOCK_KEY, v ? "1" : "0");
+    $("lockOverlay").style.display = unlocked ? "none" : "flex";
+    $("status").textContent = unlocked ? "已解锁正确姿势" : "未解锁正确姿势";
+    $("copyBtn").disabled = !unlocked || !$("optimizedText").textContent || $("optimizedText").textContent.includes("（这里会显示");
+  }
+
+  function loadTodo(){
+    try{
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    }catch(e){
+      return [];
+    }
+  }
+
+  function saveTodo(list){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  function shortText(s, n=26){
+    s = (s || "").trim().replace(/\s+/g, " ");
+    return s.length > n ? s.slice(0, n) + "…" : s;
+  }
+
+  function safeFallback(v, fallback){
+    v = (v || "").trim();
+    return v ? v : fallback;
+  }
+
+  // ---- Simulated AI logic (demo only) ----
+  function analyzeText(wish){
+    const missing = [];
+    const reasons = [];
+
+    const hasTime = /(\d+\s*(天|周|星期|月|个月|年)|今年|明年|本月|下月|近期|三个月内|半年内)/.test(wish);
+    const hasMetric = /(\d+\s*(元|万|w|k|分|分数|名次|offer|家|单|倍|%))/i.test(wish);
+    const hasBoundary = /(合法|合规|不伤害|不害人|不违背良心|不以灾祸|不走偏门)/.test(wish);
+    const hasAction = /(我会|我愿意|每天|每周|坚持|努力|学习|投递|锻炼|沟通|改进)/.test(wish);
+    const hasVow = /(还愿|回向|布施|捐|供灯|行善|随喜)/.test(wish);
+
+    if(!hasTime) missing.push("时间边界（例如：3 个月内 / 2026 年内）");
+    if(!hasMetric) missing.push("可验证的量化目标（金额/存款/成绩/offer 等）");
+    if(!hasBoundary) missing.push("方式与边界（合法合规、不伤害他人、不以灾祸换钱）");
+    if(!hasAction) missing.push("行动承诺（你准备做什么）");
+    if(!hasVow) missing.push("还愿/回向（可选，但有助于形成闭环）");
+
+    if(wish.length < 12) reasons.push("愿望过短且抽象，信息不足，容易变成“泛泛的想要”。");
+    if(!hasMetric) reasons.push("目标不可验证：你无法判断“算不算达成”，也不利于自己行动。");
+    if(!hasTime) reasons.push("缺少截止时间：没有期限就很难形成推进感与反馈。");
+    if(!hasBoundary) reasons.push("未声明边界：容易出现“方式不受控”的表达风险（建议加上正当、善意与不伤害）。");
+    if(/必须|一定要|非他不可|立刻/.test(wish)) reasons.push("表达可能过度执念：建议转为“改善沟通/提升自己/遇到更合适的缘分”。");
+
+    const risky = ["赌博","骗","报复","害","诅咒","杀","弄死"];
+    if(risky.some(w => wish.includes(w))){
+      reasons.push("检测到可能的违法/伤害倾向：建议调整为善意、合法合规的表达。");
+    }
+
+    if(missing.length === 0) missing.push("基本要素齐全（可进一步润色表达与步骤）。");
+    if(reasons.length === 0) reasons.push("从表达层面看较清晰，建议保持行动承诺并定期复盘。");
+
+    return { missing, reasons };
+  }
+
+  function buildLockedPack(rawWish, deity="（对象可选）"){
+    const time = "（补充期限）";
+    const metric = "（补充量化目标）";
+    const boundary = "合法合规、不伤害他人、不违背良心、不以灾祸与伤害交换所得";
+    const action = "我愿意持续努力与修正（补充具体行动，如每天学习/每周投递/每月储蓄等）";
+    const vow = "若因缘具足，我将随力行善回向并感恩。";
+
+    const optimized = `弟子/信众至心礼敬 ${deity}。\n\n我所求之事为：${rawWish.trim()}。\n\n愿以「${time}」为期，目标清晰可验：${metric}。\n我祈求以正当方式成就：${boundary}。\n\n我亦发愿：${action}。\n${vow}\n\n祈愿诸事随缘得成，若未得成亦愿增长智慧与平安，感恩。`;
+
+    const structured = [
+      "对象：你想拜的佛/菩萨/太岁（明确名称）",
+      "时间：例如 3 个月内 / 2026 年内",
+      "量化：例如 税后月收入≥X、存款≥X、成绩≥X、拿到offer等",
+      "边界：合法合规、不伤害他人、不走偏门、不以灾祸换取",
+      "行动：例如 每天学习 2 小时 / 每周投递 10 份简历 / 每月储蓄 20%",
+      "还愿：例如 布施/供灯/帮助家人/捐赠（量力而行）"
+    ];
+
+    const steps = [
+      "净手静心，手机静音，合掌片刻。",
+      "称念名号/圣号 3 次（随当地习俗）。",
+      "说明“我是谁”（称呼/城市等可选），说明来意。",
+      "朗读优化后的许愿稿（时间、量化、边界、行动是重点）。",
+      "致谢回向：愿将所修善行回向家人/众生（可选）。",
+      "离开时保持平和，不喧哗，之后按行动承诺去做。"
+    ];
+
+    return { optimized, structured, steps };
+  }
+
+  function renderAnalysis(raw){
+    const a = analyzeText(raw);
+    $("missingList").innerHTML = a.missing.map(x => `<li>${x}</li>`).join("");
+    $("reasonList").innerHTML = a.reasons.map(x => `<li>${x}</li>`).join("");
+
+    const pack = buildLockedPack(raw, "（你选择的对象）");
+    $("optimizedText").textContent = pack.optimized;
+    $("structuredSuggest").innerHTML = pack.structured.map(x => `<li>${x}</li>`).join("");
+    $("stepList").innerHTML = pack.steps.map(x => `<li>${x}</li>`).join("");
+
+    $("copyBtn").disabled = !unlocked;
+  }
+
+  function renderTodo(){
+    const list = loadTodo();
+    const container = $("todoList");
+    if(list.length === 0){
+      container.innerHTML = `<p class="muted" style="margin:8px 0 0;">还没有记录。点右下角 “+” 再许一个愿。</p>`;
+      return;
+    }
+
+    container.innerHTML = list.map(item => {
+      const statusTag = item.done
+        ? `<span class="tag good">已成功</span>`
+        : `<span class="tag bad">未成功</span>`;
+
+      const deity = item.deity ? ` · ${item.deity}` : "";
+      const sub = item.time || item.metric ? `<div class="muted" style="margin-top:4px; font-size:12px;">${[item.time, item.metric].filter(Boolean).join(" · ")}</div>` : "";
+
+      return `
+        <div class="todoRow" data-id="${item.id}">
+          <div class="todoLeft">
+            <input type="checkbox" ${item.done ? "checked" : ""} aria-label="mark done" class="todoCheck" />
+            <div>
+              <div class="todoTitle">${shortText(item.wish)}${deity}</div>
+              ${statusTag}
+              ${sub}
+            </div>
+          </div>
+          <button class="ghost todoDetailBtn" title="查看/复制">查看</button>
+        </div>
+      `;
+    }).join("");
+
+    container.querySelectorAll(".todoCheck").forEach(chk => {
+      chk.addEventListener("change", (e) => {
+        const id = e.target.closest(".todoRow").dataset.id;
+        const list = loadTodo();
+        const it = list.find(x => x.id === id);
+        if(!it) return;
+        it.done = e.target.checked;
+        saveTodo(list);
+        renderTodo();
+
+        if(it.done){
+          openPayModal(it);
+        }
+      });
+    });
+
+    container.querySelectorAll(".todoDetailBtn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest(".todoRow");
+        const id = row.dataset.id;
+        const list = loadTodo();
+        const it = list.find(x => x.id === id);
+        if(!it) return;
+
+        $("wishInput").value = it.wish;
+        renderAnalysis(it.wish);
+
+        if(unlocked){
+          const pack = buildLockedPack(it.wish, it.deity || "（对象）");
+          $("optimizedText").textContent = pack.optimized;
+          $("structuredSuggest").innerHTML = pack.structured.map(x => `<li>${x}</li>`).join("");
+          $("stepList").innerHTML = pack.steps.map(x => `<li>${x}</li>`).join("");
+        }
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    });
+  }
+
+  function openAddModal(){ $("addModal").style.display = "flex"; }
+  function closeAddModal(){ $("addModal").style.display = "none"; }
+
+  function openPayModal(todoItem){
+    $("payModal").style.display = "flex";
+    $("pDeity").value = todoItem.deity || "";
+    const pack = buildLockedPack(todoItem.wish, todoItem.deity || "（对象）");
+    $("pText").value = pack.optimized;
+    $("pNote").value = "";
+  }
+  function closePayModal(){ $("payModal").style.display = "none"; }
+
+  function simulateUnlock(kind){
+    const btn = kind === "ad" ? $("unlockAdBtn") : $("unlockShareBtn");
+    const old = btn.textContent;
+    btn.disabled = true;
+    let n = 3;
+    btn.textContent = kind === "ad" ? `模拟看广告… ${n}` : `模拟分享… ${n}`;
+    const t = setInterval(() => {
+      n -= 1;
+      if(n <= 0){
+        clearInterval(t);
+        btn.textContent = old;
+        btn.disabled = false;
+        setUnlocked(true);
+      }else{
+        btn.textContent = kind === "ad" ? `模拟看广告… ${n}` : `模拟分享… ${n}`;
+      }
+    }, 550);
+  }
+
+  $("analyzeBtn").addEventListener("click", () => {
+    const raw = $("wishInput").value.trim();
+    if(!raw){ alert("先写一句你最近许过的愿望吧。"); return; }
+    renderAnalysis(raw);
+  });
+
+  $("resetBtn").addEventListener("click", () => {
+    $("wishInput").value = "";
+    $("missingList").innerHTML = "";
+    $("reasonList").innerHTML = "";
+    $("optimizedText").textContent = "（这里会显示优化后的许愿稿）";
+    $("structuredSuggest").innerHTML = "";
+    $("stepList").innerHTML = "";
+    $("copyBtn").disabled = true;
+  });
+
+  $("copyBtn").addEventListener("click", async () => {
+    if(!unlocked){ alert("需要先解锁“正确姿势”。"); return; }
+    try{
+      await navigator.clipboard.writeText($("optimizedText").textContent);
+      $("status").textContent = "已复制正确姿势";
+      setTimeout(() => $("status").textContent = unlocked ? "已解锁正确姿势" : "未解锁正确姿势", 1200);
+    }catch(e){
+      alert("复制失败：请手动选择文本复制。");
+    }
+  });
+
+  $("unlockAdBtn").addEventListener("click", () => simulateUnlock("ad"));
+  $("unlockShareBtn").addEventListener("click", () => simulateUnlock("share"));
+
+  $("plusBtn").addEventListener("click", openAddModal);
+  $("closeAdd").addEventListener("click", closeAddModal);
+  $("addModal").addEventListener("click", (e) => { if(e.target === $("addModal")) closeAddModal(); });
+
+  $("saveWishBtn").addEventListener("click", () => {
+    const deity = $("mDeity").value;
+    const wish = $("mWish").value.trim();
+    if(!deity.trim() || !wish){ alert("对象和愿望原文为必填。"); return; }
+
+    const list = loadTodo();
+    list.unshift({
+      id: String(Date.now()),
+      deity,
+      wish,
+      time: $("mTime").value.trim(),
+      metric: $("mMetric").value.trim(),
+      boundary: $("mBoundary").value.trim(),
+      action: $("mAction").value.trim(),
+      vow: $("mVow").value.trim(),
+      done: false
+    });
+    saveTodo(list);
+    renderTodo();
+
+    ["mWish","mTime","mMetric","mBoundary","mAction","mVow"].forEach(id => $(id).value = "");
+    $("mDeity").value = "观音菩萨";
+    closeAddModal();
+  });
+
+  $("aiOptimizeBtn").addEventListener("click", () => {
+    if(!unlocked){ alert("一键 AI 优化需要先解锁：看广告/分享。"); return; }
+
+    const deity = $("mDeity").value;
+    const wish = $("mWish").value.trim();
+    const time = $("mTime").value.trim();
+    const metric = $("mMetric").value.trim();
+    const boundary = $("mBoundary").value.trim();
+    const action = $("mAction").value.trim();
+    const vow = $("mVow").value.trim();
+
+    if(!wish){ alert("先写愿望原文，我才能帮你优化。"); return; }
+
+    const who = "（可用昵称/城市可选）";
+    const optimized = `弟子/信众 ${who}，今日至心礼敬 ${deity}。\n\n我所求之事为：${wish}。\n\n愿以「${safeFallback(time, "（请补充时间范围）")}」为期，目标清晰可验：${safeFallback(metric, "（请补充量化目标）")}。\n我祈求以正当方式成就：${safeFallback(boundary, "合法合规、不伤害他人、不以灾祸换钱")}。\n\n我亦发愿：${safeFallback(action, "我愿意持续努力与修正（补充具体行动）")}。\n${vow ? `若因缘具足，我将以「${vow}」回向并感恩。` : "若因缘具足，我将随力行善回向并感恩。"}\n\n祈愿诸事随缘得成，感恩。`;
+
+    $("wishInput").value = wish;
+    renderAnalysis(wish);
+    $("optimizedText").textContent = optimized;
+    $("status").textContent = "已解锁正确姿势";
+    closeAddModal();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  $("closePay").addEventListener("click", closePayModal);
+  $("noPayBtn").addEventListener("click", closePayModal);
+  $("payModal").addEventListener("click", (e) => { if(e.target === $("payModal")) closePayModal(); });
+
+  $("payBtn").addEventListener("click", () => {
+    alert("演示：已完成 1 元代许愿支付（线上版需接微信支付+订单系统）。");
+    closePayModal();
+  });
+
+  setUnlocked(unlocked);
+  renderTodo();
+</script>
+</body>
+</html>
