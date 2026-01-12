@@ -1,0 +1,145 @@
+.index-page {
+  min-height: 100vh;
+  padding: 20px;
+  background-color: var(--bg);
+}
+
+.header {
+  margin-bottom: 20px;
+  
+  .title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.wish-input {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.analyze-btn {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.result-section {
+  margin-bottom: 20px;
+  
+  .section-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 12px;
+    display: block;
+  }
+  
+  .list {
+    .list-item {
+      display: block;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+  }
+  
+  .optimized-text {
+    display: block;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-bottom: 12px;
+  }
+}
+
+.unlock-section {
+  border: 1px dashed var(--bd);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  
+  .unlock-buttons {
+    margin-top: 12px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+}
+
+.todo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.todo-list {
+  .todo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--bd);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    
+    .todo-content {
+      flex: 1;
+      
+      .todo-text {
+        font-size: 14px;
+        line-height: 1.5;
+        display: block;
+        margin-bottom: 4px;
+      }
+      
+      .todo-deity {
+        font-size: 12px;
+        color: var(--muted);
+      }
+    }
+  }
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  
+  .modal-content {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 24px;
+    width: 80%;
+    max-width: 500px;
+    
+    .modal-title {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 16px;
+      display: block;
+    }
+  }
+}
