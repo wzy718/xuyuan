@@ -1,0 +1,42 @@
+.splash-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 40rpx 24rpx;
+}
+
+.splash-card {
+  width: 100%;
+  height: 70vh;
+  border-radius: 24rpx;
+  border: 2rpx dashed rgba(201, 169, 98, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.splash-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  margin-bottom: 12rpx;
+}
+
+.splash-subtitle {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+}
+
+.splash-skip {
+  position: absolute;
+  right: 24rpx;
+  top: 40rpx;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1rpx solid var(--bb-border);
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  padding: 10rpx 22rpx;
+  color: var(--bb-ink);
+}

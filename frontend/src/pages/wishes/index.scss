@@ -1,0 +1,106 @@
+.wishes-page {
+  padding-bottom: 60rpx;
+}
+
+.wishes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.wishes-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6rpx;
+}
+
+.wishes-subtitle {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+}
+
+.wishes-filters {
+  display: flex;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.wishes-filter {
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid var(--bb-border);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--bb-muted);
+  font-size: 24rpx;
+}
+
+.wishes-filter.is-active {
+  background: rgba(201, 169, 98, 0.12);
+  color: var(--bb-gold-strong);
+  border-color: rgba(201, 169, 98, 0.5);
+}
+
+.wishes-list {
+  display: grid;
+  gap: 20rpx;
+}
+
+.wishes-card {
+  background: var(--bb-paper);
+  border-radius: 18rpx;
+  border: 1rpx solid var(--bb-border);
+  padding: 24rpx;
+  box-shadow: var(--bb-shadow);
+  display: grid;
+  gap: 12rpx;
+}
+
+.wishes-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wishes-card__deity {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.wishes-card__status {
+  font-size: 22rpx;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(196, 92, 75, 0.5);
+  color: var(--bb-vermillion);
+  background: rgba(196, 92, 75, 0.08);
+}
+
+.wishes-card__status.is-success {
+  border-color: rgba(91, 140, 90, 0.5);
+  color: var(--bb-jade);
+  background: rgba(91, 140, 90, 0.12);
+}
+
+.wishes-card__text {
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: var(--bb-ink);
+}
+
+.wishes-card__meta {
+  display: flex;
+  gap: 10rpx;
+  flex-wrap: wrap;
+}
+
+.wishes-card__actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10rpx;
+}
+
+.wishes-add {
+  padding-bottom: 40rpx;
+}

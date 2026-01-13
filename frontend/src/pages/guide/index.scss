@@ -1,0 +1,59 @@
+.guide-page {
+  padding: 0;
+}
+
+.guide-swiper {
+  height: 100vh;
+}
+
+.guide-slide {
+  height: 100%;
+  padding: 80rpx 36rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.guide-ornament {
+  font-size: 22rpx;
+  color: rgba(201, 169, 98, 0.7);
+  letter-spacing: 6rpx;
+  margin-bottom: 40rpx;
+}
+
+.guide-illustration {
+  width: 280rpx;
+  height: 280rpx;
+  border-radius: 50%;
+  border: 2rpx solid rgba(201, 169, 98, 0.4);
+  background: rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 40rpx;
+  box-shadow: var(--bb-shadow);
+}
+
+.guide-icon {
+  font-size: 32rpx;
+  color: var(--bb-ink);
+}
+
+.guide-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  margin-bottom: 16rpx;
+}
+
+.guide-desc {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+  line-height: 1.7;
+}
+
+.guide-cta {
+  margin-top: 40rpx;
+  width: 70%;
+}
