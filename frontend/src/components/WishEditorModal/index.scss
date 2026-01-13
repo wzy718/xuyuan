@@ -31,14 +31,15 @@
 
 /* 标题文字 */
 .wish-modal__title {
-  font-size: 28rpx;
+  font-size: 32rpx;
   font-weight: 600;
 }
 
 /* 关闭按钮文字 */
 .wish-modal__close {
-  font-size: 22rpx;
+  font-size: 26rpx;
   color: var(--bb-muted);
+  padding: 8rpx 12rpx;
 }
 
 /* 主体区域：表单与分析区 */
@@ -54,10 +55,27 @@
 
 /* 表单字段标题文字 */
 .wish-modal__label {
-  font-size: 21rpx;
-  color: var(--bb-muted);
-  margin-bottom: 6rpx;
+  font-size: 28rpx;
+  color: var(--bb-ink);
+  margin-bottom: 8rpx;
   display: block;
+  font-weight: 500;
+}
+
+/* 提示文字 */
+.wish-modal__hint {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+/* 章节标题 */
+.wish-modal__label--section {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+  margin-top: 16rpx;
+  margin-bottom: 12rpx;
 }
 
 /* 输入控件基础样式 */
@@ -66,23 +84,67 @@
   width: 100%;
   border: 1rpx solid rgba(201, 169, 98, 0.3);
   border-radius: 14rpx;
-  padding: 10rpx 14rpx;
-  font-size: 24rpx;
-  line-height: 1.4;
+  padding: 16rpx 20rpx;
+  font-size: 28rpx;
+  line-height: 1.5;
   background: #fff;
   box-sizing: border-box;
 }
 
 /* 单行输入高度与行高，避免文字被裁切 */
 .wish-modal__input {
-  height: 64rpx;
-  line-height: 64rpx;
-  padding: 0 14rpx;
+  min-height: 72rpx;
+  line-height: 1.5;
+}
+
+/* 描述输入框 */
+.wish-modal__input--desc {
+  margin-top: 12rpx;
 }
 
 /* 多行输入最小高度 */
 .wish-modal__textarea {
-  min-height: 90rpx;
+  min-height: 120rpx;
+}
+
+/* 受益人选择选项 */
+.wish-modal__beneficiary-options {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10rpx;
+  margin-bottom: 12rpx;
+}
+
+.wish-modal__beneficiary-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 8rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid rgba(201, 169, 98, 0.3);
+  background: #fff;
+  transition: all 0.2s;
+}
+
+.wish-modal__beneficiary-option.is-active {
+  border-color: var(--bb-gold);
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.wish-modal__beneficiary-icon {
+  font-size: 32rpx;
+  margin-bottom: 4rpx;
+}
+
+.wish-modal__beneficiary-label {
+  font-size: 22rpx;
+  color: var(--bb-ink);
+}
+
+.wish-modal__beneficiary-option.is-active .wish-modal__beneficiary-label {
+  color: var(--bb-gold-strong);
+  font-weight: 500;
 }
 
 /* 表单网格布局：单列显示 */
@@ -119,15 +181,15 @@
 
 /* 诊断标题 */
 .wish-modal__analysis-title {
-  font-size: 23rpx;
+  font-size: 26rpx;
   font-weight: 600;
-  margin-bottom: 6rpx;
+  margin-bottom: 8rpx;
   display: block;
 }
 
 /* 诊断条目文本 */
 .wish-modal__analysis-item {
-  font-size: 21rpx;
+  font-size: 24rpx;
   color: var(--bb-muted);
   line-height: 1.6;
   display: block;
@@ -152,21 +214,21 @@
 
 /* 优化结果文本 */
 .wish-modal__optimize-text {
-  font-size: 21rpx;
+  font-size: 26rpx;
   line-height: 1.8;
   color: var(--bb-ink);
   background: #fff;
   border-radius: 12rpx;
-  padding: 12rpx;
+  padding: 16rpx;
   border: 1rpx solid rgba(201, 169, 98, 0.2);
-  margin-bottom: 8rpx;
+  margin-bottom: 12rpx;
   white-space: pre-wrap;
 }
 
 /* 底部按钮区域 */
 .wish-modal__footer {
-  padding: 0 20rpx 14rpx;
+  padding: 0 20rpx 20rpx;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6rpx;
+  gap: 12rpx;
 }

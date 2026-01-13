@@ -11,6 +11,10 @@ export interface User {
 
 export interface Wish {
   id: string
+  // 许愿人/受益人
+  beneficiary_type?: 'self' | 'family' | 'child' | 'couple' | 'other'
+  beneficiary_desc?: string // 具体说明，如"爸爸妈妈"、"我和老公"、"全家人"
+  // 对象（向谁许愿）
   deity?: string
   wish_text: string
   time_range?: string

@@ -13,9 +13,13 @@
 }
 
 page {
-  font-family: 'Source Han Serif SC', 'STSong', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', serif;
+  /* 字体跟随系统设置，使用 rpx 单位会自动适配系统字体大小 */
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 
+               'Microsoft YaHei', 'Source Han Serif SC', 'STSong', serif;
   background-color: var(--bb-ivory);
   color: var(--bb-ink);
+  /* 基础字号，使用 rpx 会自动跟随系统字体设置 */
+  font-size: 28rpx;
 }
 
 button::after {
@@ -89,9 +93,14 @@ button::after {
   color: #2c2c2c;
   border-radius: 999rpx;
   font-size: 28rpx;
-  line-height: 1;
-  padding: 20rpx 32rpx;
+  line-height: 1.5;
+  padding: 24rpx 40rpx;
   border: none;
+  /* 最小点击区域 88rpx（符合无障碍要求） */
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bb-btn-outline {
@@ -99,9 +108,14 @@ button::after {
   color: var(--bb-gold-strong);
   border-radius: 999rpx;
   font-size: 26rpx;
-  line-height: 1;
-  padding: 18rpx 28rpx;
+  line-height: 1.5;
+  padding: 20rpx 32rpx;
   border: 2rpx solid var(--bb-gold);
+  /* 最小点击区域 88rpx */
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bb-btn-ghost {
@@ -109,9 +123,14 @@ button::after {
   color: var(--bb-ink);
   border-radius: 999rpx;
   font-size: 26rpx;
-  line-height: 1;
-  padding: 16rpx 26rpx;
+  line-height: 1.5;
+  padding: 18rpx 28rpx;
   border: none;
+  /* 最小点击区域 88rpx */
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .bb-muted {

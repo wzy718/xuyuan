@@ -15,6 +15,8 @@ interface WishEditorModalProps {
 }
 
 const emptyWish: Partial<Wish> = {
+  beneficiary_type: 'self',
+  beneficiary_desc: '',
   deity: '',
   wish_text: '',
   time_range: '',
@@ -23,6 +25,14 @@ const emptyWish: Partial<Wish> = {
   action_commitment: '',
   return_wish: ''
 }
+
+const BENEFICIARY_OPTIONS = [
+  { value: 'self', label: '自己', icon: '🧑' },
+  { value: 'family', label: '家人', icon: '👨‍👩‍👧' },
+  { value: 'child', label: '孩子', icon: '👶' },
+  { value: 'couple', label: '姻缘', icon: '💑' },
+  { value: 'other', label: '其他', icon: '👥' }
+]
 
 export default function WishEditorModal({
   open,
@@ -187,6 +197,10 @@ export default function WishEditorModal({
   }
 
   const handleSubmit = async () => {
+    if (!wish.beneficiary_type) {
+      Taro.showToast({ title: '请选择许愿人/受益人', icon: 'none' })
+      return
+    }
     if (!wish.deity?.trim()) {
       Taro.showToast({ title: '对象为必填', icon: 'none' })
       return
@@ -218,22 +232,56 @@ export default function WishEditorModal({
         </View>
         <View className="wish-modal__body">
           <View className="wish-modal__field">
-            <Text className="wish-modal__label">对象（必填）</Text>
+            <Text className="wish-modal__label">👤 许愿人/受益人（必填）</Text>
+            <Text className="wish-modal__hint">这个愿望是为谁许的？</Text>
+            <View className="wish-modal__beneficiary-options">
+              {BENEFICIARY_OPTIONS.map((option) => (
+                <View
+                  key={option.value}
+                  className={`wish-modal__beneficiary-option ${
+                    wish.beneficiary_type === option.value ? 'is-active' : ''
+                  }`}
+                  onClick={() => setWish((prev) => ({ ...prev, beneficiary_type: option.value as any }))}
+                >
+                  <Text className="wish-modal__beneficiary-icon">{option.icon}</Text>
+                  <Text className="wish-modal__beneficiary-label">{option.label}</Text>
+                </View>
+              ))}
+            </View>
+            {(wish.beneficiary_type === 'family' ||
+              wish.beneficiary_type === 'couple' ||
+              wish.beneficiary_type === 'other') && (
+              <Input
+                className="wish-modal__input wish-modal__input--desc"
+                placeholder="具体说明，如：爸爸妈妈 / 我和老公 / 全家人"
+                value={wish.beneficiary_desc || ''}
+                onInput={(e) => setWish((prev) => ({ ...prev, beneficiary_desc: e.detail.value }))}
+              />
+            )}
+          </View>
+
+          <View className="wish-modal__field">
+            <Text className="wish-modal__label">🏛 对象（必填）</Text>
+            <Text className="wish-modal__hint">向谁许愿？</Text>
             <Input
               className="wish-modal__input"
-              placeholder="例如：观音菩萨 / 财神 / 自己"
+              placeholder="例如：观音菩萨 / 财神 / 文殊菩萨 / 药师佛 / 月老 / 自己"
               value={wish.deity || ''}
               onInput={(e) => setWish((prev) => ({ ...prev, deity: e.detail.value }))}
             />
           </View>
           <View className="wish-modal__field">
-            <Text className="wish-modal__label">愿望原文（必填）</Text>
+            <Text className="wish-modal__label">📝 愿望原文（必填）</Text>
             <Textarea
               className="wish-modal__textarea"
               placeholder="写下你的愿望..."
               value={wish.wish_text || ''}
               onInput={(e) => setWish((prev) => ({ ...prev, wish_text: e.detail.value }))}
             />
+          </View>
+
+          <View className="wish-modal__field">
+            <Text className="wish-modal__label wish-modal__label--section">📋 补充信息（选填，可帮助分析）</Text>
           </View>
           <View className="wish-modal__grid">
             <View className="wish-modal__field">
@@ -274,7 +322,7 @@ export default function WishEditorModal({
             </View>
           </View>
           <View className="wish-modal__field">
-            <Text className="wish-modal__label">还愿/回向（可选）</Text>
+            <Text className="wish-modal__label">🎁 还愿/回向（可选）</Text>
             <Textarea
               className="wish-modal__textarea"
               placeholder="例如：捐款/做公益/回向家人"
