@@ -143,3 +143,61 @@
     }
   }
 }
+
+.form {
+  .form-item {
+    margin-bottom: 14px;
+
+    .label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+  }
+
+  .input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--bd);
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .textarea {
+    width: 100%;
+    min-height: 90px;
+    padding: 12px;
+    border: 1px solid var(--bd);
+    border-radius: 12px;
+    font-size: 14px;
+  }
+}
+
+.form-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.card-inner {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--bd);
+  border-radius: 14px;
+}
+
+.disclaimer {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.disclaimer-text {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 12px 0;
+}

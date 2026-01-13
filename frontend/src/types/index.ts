@@ -3,15 +3,14 @@
  */
 
 export interface User {
-  id: number
+  id: string
   nickname?: string
   avatar_url?: string
   created_at?: string
 }
 
 export interface Wish {
-  id: number
-  user_id: number
+  id: string
   deity?: string
   wish_text: string
   time_range?: string
@@ -25,7 +24,7 @@ export interface Wish {
 }
 
 export interface AnalysisResult {
-  analysis_id: number
+  analysis_id: string
   missing_elements: string[]
   possible_reasons: string[]
   locked: boolean
@@ -46,9 +45,8 @@ export interface AnalysisResult {
 }
 
 export interface Order {
-  id: number
-  user_id: number
-  wish_id?: number
+  id: string
+  wish_id?: string
   amount: number
   status: number
   out_trade_no: string

@@ -1,20 +1,11 @@
 # 拜拜小程序
 
-基于架构设计和PRD实现的完整微信小程序应用，包含前端小程序和后端API服务。
+基于 PRD 实现的微信小程序应用，当前采用 **微信云开发（CloudBase）**：前端小程序 + 云函数 + 云数据库。
 
 ## 项目结构
 
 ```
 xuyuan/
-├── backend/          # 后端API服务
-│   ├── src/         # 源代码
-│   │   ├── db/      # 数据库相关
-│   │   ├── middleware/  # 中间件
-│   │   ├── routes/  # 路由
-│   │   ├── services/  # 服务层
-│   │   └── utils/   # 工具函数
-│   ├── scripts/     # 脚本
-│   └── package.json
 ├── frontend/        # 前端小程序（Taro）
 │   ├── src/         # 源代码
 │   │   ├── pages/   # 页面
@@ -22,47 +13,30 @@ xuyuan/
 │   │   ├── utils/   # 工具函数
 │   │   └── store/   # 状态管理
 │   ├── config/      # 配置文件
+│   ├── cloudfunctions/  # 云函数（纯云开发）
 │   └── package.json
+├── backend/          # 旧版：自建后端（Express + MySQL/Redis），纯云开发不再依赖
 ├── prd/             # 产品需求文档
 └── demo/            # Demo文件
 ```
 
 ## 技术栈
 
-### 后端
-- Node.js + Express
-- MySQL（数据存储）
-- Redis（缓存和限流）
-- JWT（认证）
-- DeepSeek API（AI分析）
-
 ### 前端
 - Taro 3.x（跨端框架）
 - React + TypeScript
 - Zustand（状态管理）
 
+### 云开发
+- 云函数（统一入口：`frontend/cloudfunctions/api`）
+- 云数据库（集合：`users` / `wishes` / `analyses` / `orders` / `unlock_logs`）
+
+### 外部服务
+- DeepSeek API（AI 分析与优化，仅在云函数中调用）
+
 ## 快速开始
 
-### 1. 后端设置
-
-```bash
-cd backend
-
-# 安装依赖
-npm install
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，填入你的配置
-
-# 初始化数据库
-npm run init-db
-
-# 启动开发服务器
-npm run dev
-```
-
-### 2. 前端设置
+### 1. 前端安装与构建
 
 ```bash
 cd frontend
@@ -70,66 +44,36 @@ cd frontend
 # 安装依赖
 npm install
 
-# 配置API地址
-# 编辑 config/dev.js 和 config/prod.js 中的 API_BASE_URL
+# 配置云环境 ID
+# 编辑 config/dev.js 和 config/prod.js 中的 CLOUD_ENV_ID
 
 # 启动开发（微信小程序）
 npm run dev:weapp
 ```
 
-### 3. 微信小程序配置
+### 2. 微信开发者工具配置（云开发）
 
-1. 在微信公众平台注册小程序，获取 AppID
-2. 在 `frontend/project.config.json` 中填入 AppID
-3. 在 `backend/.env` 中配置微信相关参数：
-   - `WECHAT_APPID`
-   - `WECHAT_SECRET`
+1. 在微信公众平台注册小程序，获取 AppID，并开通云开发。
+2. 用微信开发者工具导入项目目录：`frontend/`（不要导入 `dist/`）。
+3. 在 `frontend/project.config.json` 中填入 AppID，并确认已配置 `"cloudfunctionRoot": "cloudfunctions/"`。
+4. 在开发者工具中创建云环境，并将环境 ID 填入 `frontend/config/dev.js` 与 `frontend/config/prod.js` 的 `CLOUD_ENV_ID`。
+5. 右键云函数 `cloudfunctions/api`，上传并部署（安装依赖）。
 
-### 4. DeepSeek API 配置
+### 3. DeepSeek API 配置（云函数环境变量）
 
-在 `backend/.env` 中配置：
+在云开发控制台为云函数配置环境变量：
 - `DEEPSEEK_API_KEY`
+- （可选）`DEEPSEEK_API_URL`
 
-## 环境变量说明
-
-### 后端 (.env)
-
-```env
-# 服务器配置
-PORT=3000
-NODE_ENV=development
-
-# 数据库配置
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=baibai_db
-
-# Redis配置
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# 微信小程序配置
-WECHAT_APPID=your_appid
-WECHAT_SECRET=your_secret
-
-# JWT配置
-JWT_SECRET=your_jwt_secret_key
-JWT_EXPIRE=2h
-REFRESH_TOKEN_EXPIRE=7d
-
-# DeepSeek API配置
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
-```
+## 说明
+- 纯云开发版不需要配置服务器域名（云函数调用走云开发通道），也不需要自建 MySQL/Redis。
+- 支付目前保留“模拟参数”用于联调；正式接入微信支付需要补齐商户配置与回调处理。
 
 ## 核心功能
 
 ### 1. 用户认证
-- 微信登录（code2session）
-- JWT token认证
-- Token刷新机制
+- 基于微信云开发身份（OPENID）
+- 前端获取用户资料，云函数写入/更新用户信息
 
 ### 2. 愿望分析
 - 调用DeepSeek API分析愿望
@@ -151,72 +95,32 @@ DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
 - 微信支付集成
 - 支付回调处理
 
-## API接口
+## 云函数 action（前端调用）
+云函数统一入口为 `frontend/cloudfunctions/api`，通过 `Taro.cloud.callFunction({ name: 'api', data: { action, data } })` 调用。
 
-### 认证相关
-- `POST /api/auth/login` - 微信登录
-- `POST /api/auth/refresh` - 刷新token
-- `GET /api/auth/profile` - 获取用户信息
-
-### 愿望分析
-- `POST /api/wish/analyze` - 分析愿望
-- `POST /api/wish/optimize` - AI优化愿望
-
-### TODO管理
-- `GET /api/todos` - 获取愿望列表
-- `POST /api/todos` - 新增愿望
-- `PUT /api/todos/:id` - 更新愿望
-- `DELETE /api/todos/:id` - 删除愿望
-
-### 解锁
-- `POST /api/unlock/ad` - 看广告解锁
-- `POST /api/unlock/share` - 分享解锁
-- `GET /api/unlock/status` - 查询解锁状态
-
-### 支付
-- `POST /api/payment/create` - 创建支付订单
-- `POST /api/payment/callback` - 支付回调
-
-## 数据库表结构
-
-- `users` - 用户表
-- `wishes` - 愿望表
-- `analyses` - 分析记录表
-- `orders` - 订单表
-- `user_sessions` - 用户会话表
-
-详细表结构见 `backend/scripts/init-db.js`
+- `auth.login`
+- `wish.analyze` / `wish.optimize`
+- `unlock.ad` / `unlock.share` / `unlock.status`
+- `todos.list` / `todos.create` / `todos.update` / `todos.delete`
+- `payment.create`
 
 ## 安全措施
 
-1. **API Key保护**：DeepSeek API Key仅在后端使用
-2. **内容安全**：输入和输出内容审核
-3. **限流保护**：用户级别和IP级别限流
-4. **Token安全**：JWT签名验证，短过期时间
-5. **解锁风控**：设备指纹、行为序列、频控
+1. **API Key保护**：DeepSeek API Key 仅在云函数中使用，禁止出现在前端
+2. **内容安全**：云函数侧进行文本安全审核（含敏感词兜底）
+3. **限流保护**：云函数侧按用户维度做简化频控（基于云数据库记录）
+4. **解锁风控**：解锁 token 一次性 + 过期时间 + 频控
 
 ## 开发注意事项
 
-1. **环境变量**：生产环境必须使用强密码和密钥
-2. **数据库**：生产环境使用云数据库，启用SSL
-3. **Redis**：生产环境配置密码
-4. **微信支付**：需要配置商户号和支付密钥
-5. **内容安全**：建议启用微信内容安全API
+1. **环境变量**：DeepSeek Key 通过云函数环境变量配置，禁止提交到仓库
+2. **数据库权限**：建议默认仅云函数可写，客户端只读或受限读
+3. **微信支付**：正式接入需配置商户号并实现回调幂等更新订单状态
+4. **内容安全**：建议开通并启用云开发内容安全能力
 
 ## 部署
 
-### 后端部署
-
-1. 使用PM2或类似工具管理进程
-2. 配置Nginx反向代理
-3. 使用云数据库和Redis
-4. 配置HTTPS
-
-### 前端部署
-
-1. 使用Taro构建小程序
-2. 在微信开发者工具中上传代码
-3. 提交审核
+纯云开发部署请参考 `DEPLOYMENT.md`。
 
 ## 许可证
 

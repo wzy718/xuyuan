@@ -66,6 +66,9 @@ router.post(
         unlocked: true
       });
 
+      // 记录一次解锁行为（用于风控统计）
+      await redis.set(unlockKey, '1', { EX: 60 * 60 });
+
       // 返回完整结果
       const fullResult = analysis.full_result || {};
 
@@ -143,6 +146,10 @@ router.post(
       await Analysis.update(analysis.id, {
         unlocked: true
       });
+
+      // 记录一次解锁行为（用于风控统计）
+      const unlockKey = `unlock:user:${userId}:${Date.now()}`;
+      await redis.set(unlockKey, '1', { EX: 60 * 60 });
 
       // 返回完整结果
       const fullResult = analysis.full_result || {};

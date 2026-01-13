@@ -1,6 +1,6 @@
 # 拜拜小程序前端
 
-基于 Taro 3.x + React + TypeScript 开发的微信小程序。
+基于 Taro 3.x + React + TypeScript 开发的微信小程序，使用 **微信云开发（CloudBase）**：云函数 + 云数据库。
 
 ## 目录结构
 
@@ -17,6 +17,8 @@ frontend/
 │   ├── types/         # 类型定义
 │   ├── app.tsx        # 应用入口
 │   └── app.config.ts  # 应用配置
+├── cloudfunctions/    # 云函数（纯云开发）
+│   └── api/           # 云函数统一入口
 ├── config/            # 构建配置
 │   ├── dev.js        # 开发环境
 │   ├── prod.js       # 生产环境
@@ -39,14 +41,13 @@ npm run build:weapp
 
 ## 配置
 
-### 1. API地址配置
+### 1. 云环境 ID
 
 编辑 `config/dev.js` 和 `config/prod.js`：
 
 ```javascript
 defineConstants: {
-  API_BASE_URL: '"http://localhost:3000/api"'  // 开发环境
-  // API_BASE_URL: '"https://your-api-domain.com/api"'  // 生产环境
+  CLOUD_ENV_ID: '"your-cloud-env-id"'
 }
 ```
 
@@ -60,16 +61,23 @@ defineConstants: {
 }
 ```
 
+### 3. 云函数部署
+
+在微信开发者工具中：
+- 导入项目目录：`frontend/`
+- 创建云环境
+- 右键 `cloudfunctions/api` 上传并部署（安装依赖）
+
 ## 核心功能
 
 ### 1. 用户登录
 
-使用微信登录API，自动获取code并调用后端登录接口。
+使用 `getUserProfile` 获取基础资料，并通过云函数写入/更新用户信息（身份基于 OPENID）。
 
 ### 2. 愿望分析
 
 - 输入愿望内容
-- 调用后端分析接口
+- 调用云函数 `wish.analyze`
 - 显示缺失要素和潜在原因
 - 解锁后显示完整分析结果
 
@@ -91,6 +99,8 @@ defineConstants: {
 - 创建支付订单
 - 调起微信支付
 - 支付结果处理
+
+> 备注：当前仓库内支付参数为模拟数据，用于联调 UI；正式接入需补齐商户配置与回调处理。
 
 ## 状态管理
 
@@ -142,7 +152,7 @@ npm run build:weapp
 
 ## 注意事项
 
-1. **域名配置**：生产环境需要在微信公众平台配置服务器域名
-2. **HTTPS**：生产环境必须使用HTTPS
-3. **代码大小**：小程序代码包不能超过2MB
-4. **图片资源**：建议使用CDN或云存储
+1. **云开发开通**：需在微信公众平台开通云开发并创建环境
+2. **环境变量**：DeepSeek Key 需在云函数环境变量中配置，禁止写入前端
+3. **代码大小**：小程序代码包不能超过 2MB
+4. **图片资源**：建议使用云存储

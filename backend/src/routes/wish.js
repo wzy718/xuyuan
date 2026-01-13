@@ -88,8 +88,31 @@ router.post(
   contentSecurityCheck,
   async (req, res, next) => {
     try {
-      const { wish_text, deity, profile, existing_fields } = req.body;
+      const { wish_text, deity, profile, existing_fields, analysis_id } = req.body;
       const userId = req.user.id;
+
+      // PRD 要求：优化能力需要解锁后才能使用
+      if (!analysis_id) {
+        return res.status(400).json({
+          code: -1,
+          msg: '缺少analysis_id（请先调用 analyze 并完成解锁）'
+        });
+      }
+
+      const analysis = await Analysis.findById(parseInt(analysis_id));
+      if (!analysis || analysis.user_id !== userId) {
+        return res.status(404).json({
+          code: -1,
+          msg: '分析记录不存在'
+        });
+      }
+
+      if (!analysis.unlocked) {
+        return res.status(403).json({
+          code: -1,
+          msg: '未解锁，无法使用一键 AI 优化'
+        });
+      }
 
       // 调用DeepSeek优化
       const optimizedResult = await analyzeWish(wish_text, deity, profile || {});

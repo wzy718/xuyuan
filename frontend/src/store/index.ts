@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import Taro from '@tarojs/taro'
 
 interface User {
-  id: number
+  id: string
   nickname?: string
   avatar_url?: string
 }
@@ -22,8 +22,6 @@ export const useAppStore = create<AppState>((set) => ({
   isLoggedIn: false,
   setUser: (user) => set({ user, isLoggedIn: !!user }),
   logout: () => {
-    Taro.removeStorageSync('access_token')
-    Taro.removeStorageSync('refresh_token')
     set({ user: null, isLoggedIn: false })
   }
 }))

@@ -23,7 +23,7 @@ function createLimiter(options) {
 /**
  * 基于Redis的用户级别限流
  */
-async function userRateLimit(maxRequests, windowMs) {
+function userRateLimit(maxRequests, windowMs) {
   return async (req, res, next) => {
     if (!req.user) {
       return next();
@@ -31,7 +31,9 @@ async function userRateLimit(maxRequests, windowMs) {
 
     try {
       const redis = await getRedis();
-      const key = `rate_limit:user:${req.user.id}`;
+      // 按“用户 + 路由”维度限流，避免不同接口共享同一个计数器
+      const routeKey = `${req.baseUrl || ''}${req.path || ''}`;
+      const key = `rate_limit:user:${req.user.id}:${routeKey}`;
       const current = await redis.incr(key);
 
       if (current === 1) {

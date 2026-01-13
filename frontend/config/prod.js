@@ -3,7 +3,7 @@ module.exports = {
     NODE_ENV: '"production"'
   },
   defineConstants: {
-    API_BASE_URL: '"https://your-api-domain.com/api"'
+    CLOUD_ENV_ID: '"your-cloud-env-id"'
   },
   mini: {},
   h5: {}

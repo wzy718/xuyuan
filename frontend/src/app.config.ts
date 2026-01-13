@@ -2,6 +2,7 @@ export default {
   pages: [
     'pages/index/index'
   ],
+  cloud: true,
   window: {
     backgroundTextStyle: 'light',
     navigationBarBackgroundColor: '#fff',

@@ -26,12 +26,17 @@
     "dev:rn": "npm run build:rn -- --watch",
     "dev:qq": "npm run build:qq -- --watch",
     "dev:jd": "npm run build:jd -- --watch",
-    "dev:quickapp": "npm run build:quickapp -- --watch"
+    "dev:quickapp": "npm run build:quickapp -- --watch",
+    "lint": "eslint src --ext .ts,.tsx"
   },
   "babel": {
     "presets": [
       [
-        "taro"
+        "taro",
+        {
+          "framework": "react",
+          "ts": true
+        }
       ]
     ]
   },
@@ -41,6 +46,7 @@
     "@tarojs/helper": "^3.6.0",
     "@tarojs/plugin-framework-react": "^3.6.0",
     "@tarojs/plugin-platform-weapp": "^3.6.0",
+    "@tarojs/react": "^3.6.0",
     "@tarojs/runtime": "^3.6.0",
     "@tarojs/shared": "^3.6.0",
     "@tarojs/taro": "^3.6.0",

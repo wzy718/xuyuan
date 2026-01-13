@@ -1,0 +1,10 @@
+{
+  "name": "baibai-cloud-api",
+  "version": "1.0.0",
+  "description": "拜拜小程序云函数 API 聚合入口",
+  "main": "index.js",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "wx-server-sdk": "^3.0.1"
+  }
+}

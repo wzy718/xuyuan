@@ -2,110 +2,46 @@
 
 ## 前置要求
 
-- Node.js 16+ 
-- MySQL 5.7+ 或 8.0+
-- Redis 6.0+
-- 微信小程序 AppID 和 Secret
+- Node.js 16+
+- 微信小程序 AppID（已开通云开发）
 - DeepSeek API Key
 
 ## 5分钟快速启动
 
-### 步骤1：克隆项目并安装依赖
+### 步骤1：安装前端依赖并启动构建
 
 ```bash
-# 后端
-cd backend
+cd frontend
 npm install
 
-# 前端
-cd ../frontend
-npm install
-```
-
-### 步骤2：配置后端
-
-```bash
-cd backend
-
-# 复制环境变量模板
-cp .env.example .env
-
-# 编辑 .env 文件，至少配置以下内容：
-# - DB_PASSWORD（数据库密码）
-# - WECHAT_APPID（微信小程序AppID）
-# - WECHAT_SECRET（微信小程序Secret）
-# - DEEPSEEK_API_KEY（DeepSeek API密钥）
-# - JWT_SECRET（JWT密钥，建议使用强随机字符串）
-```
-
-### 步骤3：初始化数据库
-
-```bash
-# 确保MySQL已启动
-# 创建数据库（如果不存在）
-mysql -u root -p
-CREATE DATABASE baibai_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-exit
-
-# 运行初始化脚本
-npm run init-db
-```
-
-### 步骤4：启动后端服务
-
-```bash
-# 开发模式（自动重启）
-npm run dev
-
-# 或生产模式
-npm start
-```
-
-后端服务将在 `http://localhost:3000` 启动
-
-### 步骤5：配置前端
-
-```bash
-cd ../frontend
-
-# 编辑 config/dev.js，确保 API_BASE_URL 指向后端地址
-# API_BASE_URL: '"http://localhost:3000/api"'
-
-# 编辑 project.config.json，填入你的微信小程序 AppID
-```
-
-### 步骤6：启动前端开发
-
-```bash
-# 启动微信小程序开发模式
+# 启动微信小程序开发模式（持续构建到 dist）
 npm run dev:weapp
 ```
 
-在微信开发者工具中打开 `frontend/dist` 目录
+### 步骤2：配置云环境 ID
+
+编辑：
+- `frontend/config/dev.js`
+- `frontend/config/prod.js`
+
+将 `CLOUD_ENV_ID` 改为你的云环境 ID。
+
+### 步骤3：微信开发者工具导入与云函数部署
+
+1. 打开微信开发者工具，导入项目目录：`frontend/`（不要导入 `dist/`）。
+2. 在 `frontend/project.config.json` 中填写 AppID。
+3. 创建云环境，并确保环境 ID 与 `CLOUD_ENV_ID` 一致。
+4. 右键云函数 `cloudfunctions/api` → 上传并部署（安装依赖）。
+
+### 步骤4：配置云函数环境变量（DeepSeek）
+
+在云开发控制台为云函数配置环境变量：
+- `DEEPSEEK_API_KEY`
+- （可选）`DEEPSEEK_API_URL`
 
 ## 验证安装
 
-### 1. 检查后端健康状态
-
-```bash
-curl http://localhost:3000/health
-```
-
-应该返回：
-```json
-{"status":"ok","timestamp":"2024-01-01T00:00:00.000Z"}
-```
-
-### 2. 测试数据库连接
-
-后端启动日志应该显示：
-```
-✅ MySQL连接成功
-✅ Redis连接成功
-🚀 服务器运行在 http://localhost:3000
-```
-
-### 3. 测试前端
+### 测试前端
 
 在微信开发者工具中：
 1. 点击"登录"按钮
@@ -114,40 +50,19 @@ curl http://localhost:3000/health
 
 ## 常见问题
 
-### Q: 数据库连接失败
-
-**A:** 检查以下几点：
-1. MySQL服务是否启动：`sudo systemctl status mysql`
-2. 数据库用户和密码是否正确
-3. 数据库是否已创建：`mysql -u root -p -e "SHOW DATABASES;"`
-
-### Q: Redis连接失败
-
-**A:** 
-1. 检查Redis服务：`sudo systemctl status redis`
-2. 如果Redis设置了密码，在 `.env` 中配置 `REDIS_PASSWORD`
-3. 开发环境可以暂时注释掉Redis相关代码
-
-### Q: 微信登录失败
+### Q: 云函数调用失败
 
 **A:**
-1. 确认 `WECHAT_APPID` 和 `WECHAT_SECRET` 配置正确
-2. 检查小程序是否已发布（开发环境可以使用测试号）
-3. 确认后端服务可以访问外网（需要调用微信API）
+1. 是否已开通云开发并创建环境
+2. `CLOUD_ENV_ID` 是否填写正确
+3. 云函数 `cloudfunctions/api` 是否已上传并部署（安装依赖）
 
 ### Q: DeepSeek API调用失败
 
 **A:**
-1. 确认 `DEEPSEEK_API_KEY` 配置正确
-2. 检查API余额是否充足
-3. 查看后端日志了解具体错误信息
-
-### Q: 前端无法连接后端
-
-**A:**
-1. 确认后端服务已启动
-2. 检查 `config/dev.js` 中的 `API_BASE_URL` 配置
-3. 在微信开发者工具中，设置 -> 项目设置 -> 不校验合法域名（开发环境）
+1. 确认云函数环境变量 `DEEPSEEK_API_KEY` 已配置
+2. 检查 API 余额是否充足
+3. 查看云函数日志了解具体错误信息
 
 ## 下一步
 
