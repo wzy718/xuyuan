@@ -1,0 +1,452 @@
+# 拜拜小程序 - Cursor Rules
+
+## 项目概述
+
+这是一个基于微信云开发的微信小程序项目，主要功能包括：
+- 用户认证（基于微信 OPENID）
+- 愿望分析（调用 DeepSeek API）
+- 解锁功能（看广告/分享解锁）
+- TODO 管理（愿望列表 CRUD）
+- 支付功能（1 元许愿）
+
+## 技术栈
+
+### 前端
+- **框架**: Taro 3.x（跨端框架）
+- **语言**: TypeScript + React
+- **状态管理**: Zustand
+- **样式**: SCSS
+- **构建工具**: Taro CLI + Webpack 5
+
+### 后端（云开发）
+- **云函数**: Node.js（统一入口：`frontend/cloudfunctions/api`）
+- **云数据库**: 微信云数据库（集合：`users` / `wishes` / `analyses` / `orders` / `unlock_logs`）
+- **外部服务**: DeepSeek API（AI 分析）
+
+### 后端（自建，可选）
+- **框架**: Express.js
+- **数据库**: MySQL + Redis
+- **认证**: JWT
+
+## 项目结构
+
+```
+xuyuan/
+├── frontend/              # 前端小程序
+│   ├── src/               # 源代码
+│   │   ├── pages/         # 页面组件
+│   │   │   ├── splash/   # 开屏广告页
+│   │   │   ├── guide/    # 引导页（3页滑动）
+│   │   │   ├── index/    # 首页（Tab 1）- 愿望分析
+│   │   │   ├── wishes/   # 我的愿望（Tab 2）- 愿望列表
+│   │   │   ├── wish-detail/  # 愿望详情页
+│   │   │   └── profile/  # 个人中心（Tab 3）
+│   │   ├── components/    # 公共组件
+│   │   │   ├── Header/   # 顶部导航
+│   │   │   ├── BannerAd/ # 横幅广告
+│   │   │   ├── WishInput/ # 愿望输入区
+│   │   │   ├── AnalysisResult/ # 分析结果卡片
+│   │   │   ├── WishCard/ # 愿望卡片
+│   │   │   ├── WishList/ # 愿望列表
+│   │   │   ├── AddWishModal/ # 新增愿望弹窗
+│   │   │   ├── PaymentModal/ # 支付弹窗
+│   │   │   ├── UnlockButtons/ # 解锁按钮组
+│   │   │   ├── UserStats/ # 用户统计
+│   │   │   ├── MenuList/ # 菜单列表
+│   │   │   ├── Disclaimer/ # 免责声明
+│   │   │   └── Loading/  # 加载动画（莲花）
+│   │   ├── utils/         # 工具函数
+│   │   │   └── api.ts     # API 调用封装（云函数）
+│   │   ├── store/         # 状态管理（Zustand）
+│   │   └── types/         # TypeScript 类型定义
+│   ├── config/            # 配置文件（dev.js / prod.js）
+│   ├── cloudfunctions/    # 云函数
+│   │   └── api/           # 统一入口云函数
+│   └── dist/              # 构建产物（不要提交）
+├── backend/               # 自建后端（可选，纯云开发不依赖）
+│   ├── src/
+│   │   ├── routes/        # 路由
+│   │   ├── services/      # 业务逻辑
+│   │   ├── middleware/    # 中间件
+│   │   └── db/            # 数据库
+│   └── scripts/           # 脚本
+├── prd/                   # 产品需求文档
+│   ├── prd.md            # PRD 主文档
+│   ├── 业务流程.md       # 业务流程说明
+│   ├── 页面设计.md       # 页面设计 ASCII 图
+│   └── 架构设计.md       # 技术架构设计
+└── demo/                  # Demo 文件
+```
+
+## 代码风格规范
+
+### TypeScript / JavaScript
+
+1. **命名规范**：
+   - 变量/函数：`camelCase`
+   - 组件/类：`PascalCase`
+   - 常量：`UPPER_SNAKE_CASE`
+   - 文件：`kebab-case` 或 `camelCase`（与导出保持一致）
+
+2. **类型定义**：
+   - 优先使用 TypeScript 类型推断
+   - 接口定义使用 `interface`，类型别名使用 `type`
+   - API 响应类型统一使用 `ApiResponse<T>`
+
+3. **函数风格**：
+   - 优先使用箭头函数和函数式组件
+   - 异步函数必须使用 `async/await`，避免 `.then()`
+   - 错误处理使用 `try-catch`
+
+4. **代码格式**：
+   - 使用 2 空格缩进
+   - 字符串使用单引号（JavaScript）或双引号（TypeScript，根据项目配置）
+   - 行尾不加分号（根据项目配置）
+   - 对象/数组最后一个元素后加逗号（多行时）
+
+### React / Taro
+
+1. **组件规范**：
+   - 使用函数式组件 + Hooks
+   - 组件文件命名：`ComponentName.tsx`
+   - Props 类型必须定义
+   - 使用 `React.memo` 优化性能（必要时）
+
+2. **状态管理**：
+   - 局部状态使用 `useState`
+   - 全局状态使用 Zustand
+   - 避免过度使用全局状态
+
+3. **样式规范**：
+   - 使用 SCSS 模块化
+   - 类名使用 `kebab-case`
+   - 避免全局样式污染
+
+### 云函数
+
+1. **代码风格**：
+   - 使用 CommonJS（`require` / `module.exports`）
+   - 统一错误处理：`ok(data)` / `fail(msg, code)`
+   - 使用 `cloud.getWXContext()` 获取 OPENID
+
+2. **Action 设计**：
+   - 统一入口：`cloudfunctions/api/index.js`
+   - Action 格式：`module.action`（如 `auth.login`）
+   - 参数验证在 action 内部完成
+
+3. **安全规范**：
+   - API Key 必须通过环境变量配置
+   - 内容安全审核必须实现（`msgSecCheck` + 敏感词过滤）
+   - 限流保护必须实现（基于云数据库记录）
+
+## API 设计规范
+
+### 云函数 API
+
+1. **调用方式**：
+   ```typescript
+   Taro.cloud.callFunction({
+     name: 'api',
+     data: { action: 'auth.login', data: { ... } }
+   })
+   ```
+
+2. **响应格式**：
+   ```typescript
+   interface ApiResponse<T> {
+     code: number;  // 0 表示成功，非 0 表示失败
+     data?: T;     // 成功时返回数据
+     msg?: string; // 失败时返回错误信息
+   }
+   ```
+
+3. **Action 列表**：
+   - `auth.login` - 用户登录
+   - `wish.analyze` - 分析愿望
+   - `wish.optimize` - 优化愿望（需解锁）
+   - `todos.list` - 获取愿望列表
+   - `todos.create` - 新增愿望
+   - `todos.update` - 更新愿望
+   - `todos.delete` - 删除愿望
+   - `unlock.ad` - 看广告解锁
+   - `unlock.share` - 分享解锁
+   - `unlock.status` - 查询解锁状态
+   - `payment.create` - 创建支付订单
+
+### 自建后端 API（可选）
+
+1. **路由规范**：
+   - RESTful 风格
+   - 统一前缀：`/api`
+   - 版本控制：`/api/v1`（如需要）
+
+2. **认证方式**：
+   - 使用 JWT Token
+   - Header: `Authorization: Bearer <token>`
+   - Token 过期时间：2 小时
+
+3. **错误处理**：
+   - 统一错误响应格式
+   - HTTP 状态码 + 业务错误码
+
+## 数据库设计规范
+
+### 云数据库集合
+
+1. **users** - 用户表
+   - `_id`: 主键
+   - `_openid`: 微信 OPENID（系统字段）
+   - `nickname`: 昵称
+   - `avatar_url`: 头像
+   - `created_at`: 创建时间
+   - `updated_at`: 更新时间
+
+2. **wishes** - 愿望表
+   - `_id`: 主键
+   - `_openid`: 用户 OPENID
+   - `deity`: 对象
+   - `wish_text`: 愿望原文
+   - `time_range`: 时间范围
+   - `target_quantify`: 目标量化
+   - `way_boundary`: 方式边界
+   - `action_commitment`: 行动承诺
+   - `return_wish`: 还愿/回向
+   - `status`: 状态（0:未成功 1:已成功）
+   - `created_at`: 创建时间
+   - `updated_at`: 更新时间
+
+3. **analyses** - 分析记录表
+   - `_id`: 主键
+   - `_openid`: 用户 OPENID
+   - `wish_id`: 关联愿望 ID（可选）
+   - `wish_text`: 愿望原文
+   - `analysis_result`: 分析结果（JSON）
+   - `full_result`: 完整结果（解锁后，JSON）
+   - `unlocked`: 是否已解锁
+   - `unlock_token`: 解锁 token
+   - `unlock_token_expires_at`: token 过期时间
+   - `unlock_token_used`: token 是否已使用
+   - `created_at`: 创建时间
+
+4. **orders** - 订单表
+   - `_id`: 主键
+   - `_openid`: 用户 OPENID
+   - `wish_id`: 关联愿望 ID
+   - `amount`: 金额（分）
+   - `status`: 状态（0:待支付 1:已支付 2:已完成 3:已退款）
+   - `payment_id`: 微信支付订单号
+   - `out_trade_no`: 商户订单号
+   - `transaction_id`: 微信支付交易号
+   - `callback_received`: 是否已收到回调
+   - `created_at`: 创建时间
+   - `updated_at`: 更新时间
+
+5. **unlock_logs** - 解锁日志表
+   - `_id`: 主键
+   - `_openid`: 用户 OPENID
+   - `analysis_id`: 分析记录 ID
+   - `unlock_type`: 解锁类型（ad/share）
+   - `device_fingerprint`: 设备指纹
+   - `created_at`: 创建时间
+
+### 数据库权限
+
+- **默认权限**：仅云函数可写，客户端只读或受限读
+- **索引优化**：为常用查询字段创建索引
+
+## 安全规范
+
+### 必须遵守
+
+1. **API Key 保护**：
+   - DeepSeek API Key 必须通过云函数环境变量配置
+   - 禁止在前端代码中硬编码任何密钥
+   - 禁止提交密钥到 Git 仓库
+
+2. **内容安全**：
+   - 必须调用微信内容安全 API（`msgSecCheck`）
+   - 必须实现敏感词过滤（自定义规则）
+   - 必须对 AI 输出内容进行安全审核
+   - 防止提示词注入（过滤特殊字符、限制长度）
+
+3. **限流保护**：
+   - 用户级别限流（每天最多 N 次）
+   - IP 级别限流（防止恶意刷接口）
+   - 基于云数据库记录实现频控
+
+4. **解锁风控**：
+   - 解锁 token 必须绑定 `user_id` + `analysis_id`
+   - Token 过期时间：5 分钟（短过期）
+   - Token 一次性使用（防重放）
+   - 设备指纹 + 行为序列 + 频控 + 黑名单
+
+5. **支付安全**：
+   - 支付回调必须验签
+   - 支付回调必须去重（幂等性）
+   - 订单状态只允许向前推进（状态机）
+
+### 数据加密
+
+- 敏感数据加密存储（可选）
+- HTTPS 传输（微信小程序默认）
+- 数据库连接使用 SSL（云数据库默认）
+
+## 开发约定
+
+### 环境变量
+
+1. **云函数环境变量**（云开发控制台配置）：
+   - `DEEPSEEK_API_KEY`: DeepSeek API Key（必须）
+   - `DEEPSEEK_API_URL`: DeepSeek API URL（可选，默认：https://api.deepseek.com/v1/chat/completions）
+
+2. **前端配置**（`config/dev.js` / `config/prod.js`）：
+   - `CLOUD_ENV_ID`: 云环境 ID
+
+3. **自建后端环境变量**（`.env` 文件，不提交）：
+   - `DEEPSEEK_API_KEY`
+   - `MYSQL_HOST` / `MYSQL_USER` / `MYSQL_PASSWORD` / `MYSQL_DATABASE`
+   - `REDIS_HOST` / `REDIS_PORT`
+   - `JWT_SECRET`
+
+### Git 提交规范
+
+使用 Conventional Commits 格式：
+
+- `feat: 新功能`
+- `fix: 修复 bug`
+- `docs: 文档更新`
+- `style: 代码格式调整（不影响功能）`
+- `refactor: 代码重构`
+- `perf: 性能优化`
+- `test: 测试相关`
+- `chore: 构建/工具链相关`
+
+示例：
+```
+feat: 添加愿望分析功能
+fix: 修复解锁 token 过期时间计算错误
+docs: 更新 README.md
+refactor: 重构云函数 action 分发逻辑
+```
+
+### 代码审查要点
+
+1. **安全性**：
+   - API Key 是否暴露
+   - 内容安全是否实现
+   - 限流是否实现
+   - 解锁风控是否实现
+
+2. **代码质量**：
+   - 类型定义是否完整
+   - 错误处理是否完善
+   - 代码是否可读
+   - 是否有性能问题
+
+3. **功能完整性**：
+   - 边界情况是否处理
+   - 错误提示是否友好
+   - 用户体验是否良好
+
+## 测试要求
+
+### 当前状态
+
+- 暂无测试框架
+- 建议引入测试框架（Jest / Vitest）
+
+### 测试覆盖（建议）
+
+1. **单元测试**：
+   - 工具函数
+   - 业务逻辑函数
+   - 组件渲染
+
+2. **集成测试**：
+   - API 接口
+   - 数据库操作
+   - 云函数调用
+
+3. **E2E 测试**（可选）：
+   - 关键用户流程
+   - 支付流程
+   - 解锁流程
+
+## 部署规范
+
+### 云开发部署
+
+1. **前端部署**：
+   - 使用微信开发者工具上传代码
+   - 配置云环境 ID
+   - 提交审核
+
+2. **云函数部署**：
+   - 右键云函数目录上传并部署
+   - 配置环境变量
+   - 测试云函数调用
+
+3. **数据库初始化**：
+   - 在云开发控制台创建集合
+   - 设置数据库权限
+   - 创建索引（如需要）
+
+### 自建后端部署（可选）
+
+参考 `DEPLOYMENT.md` 文档。
+
+## 文档要求
+
+1. **代码注释**：
+   - 复杂逻辑必须添加注释
+   - 函数必须添加 JSDoc 注释
+   - 注释使用中文
+
+2. **文档更新**：
+   - 功能变更必须更新相关文档
+   - PRD 变更必须更新 `prd/` 目录
+   - 架构变更必须更新 `prd/架构设计.md`
+
+## 常见问题
+
+### Q: 如何添加新的 API action？
+
+A: 在 `cloudfunctions/api/index.js` 中添加新的 action 处理逻辑，并在 `frontend/src/utils/api.ts` 中添加对应的调用函数。
+
+### Q: 如何添加新的数据库集合？
+
+A: 在云开发控制台创建集合，设置权限，并在代码中添加对应的数据模型定义。
+
+### Q: 如何调试云函数？
+
+A: 使用微信开发者工具的云函数调试功能，或查看云开发控制台的日志。
+
+### Q: 如何处理云函数错误？
+
+A: 统一使用 `fail(msg, code)` 返回错误，前端通过 `code !== 0` 判断错误。
+
+## 注意事项
+
+1. **不要提交敏感信息**：
+   - `.env` 文件
+   - API Key
+   - 数据库密码
+
+2. **不要提交构建产物**：
+   - `frontend/dist/`
+   - `node_modules/`
+
+3. **保持代码简洁**：
+   - 避免过度设计
+   - 优先使用现有方案
+   - 遵循 DRY 原则
+
+4. **性能优化**：
+   - 避免不必要的云函数调用
+   - 合理使用缓存
+   - 优化数据库查询
+
+5. **用户体验**：
+   - 错误提示要友好
+   - 加载状态要明确
+   - 操作反馈要及时
