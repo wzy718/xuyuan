@@ -57,3 +57,32 @@ export interface Order {
   transaction_id?: string
   created_at?: string
 }
+
+export interface WishProfile {
+  id: string
+  beneficiary_type: 'self' | 'family' | 'child' | 'couple' | 'other'
+  beneficiary_desc?: string
+  deity: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Person {
+  id: string
+  name: string
+  category?: 'self' | 'family' | 'child' | 'couple' | 'other' | string // 分类，支持自定义
+  id_card?: string
+  phone?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PersonCategory {
+  id: string
+  value: string // 分类值（唯一标识）
+  label: string // 分类名称（显示）
+  icon?: string // 图标（可选）
+  is_default?: boolean // 是否为默认分类
+  created_at?: string
+  updated_at?: string
+}

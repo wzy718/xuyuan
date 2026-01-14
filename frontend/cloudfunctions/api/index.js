@@ -466,6 +466,305 @@ async function handlePaymentCreate(openid, data) {
   });
 }
 
+// 许愿人/受益人和对象信息管理
+async function handleProfileList(openid, data) {
+  const res = await db
+    .collection('wish_profiles')
+    .where({ _openid: openid })
+    .orderBy('updated_at', 'desc')
+    .get();
+  return ok(res.data || []);
+}
+
+async function handleProfileCreate(openid, data) {
+  const beneficiaryType = ensureString(data?.beneficiary_type);
+  const beneficiaryDesc = ensureString(data?.beneficiary_desc || '');
+  const deity = ensureString(data?.deity || '');
+
+  if (!beneficiaryType) return fail('许愿人/受益人类型不能为空');
+  if (!deity.trim()) return fail('对象不能为空');
+
+  // 检查是否已存在相同的记录
+  const existing = await db
+    .collection('wish_profiles')
+    .where({
+      _openid: openid,
+      beneficiary_type: beneficiaryType,
+      beneficiary_desc: beneficiaryDesc,
+      deity: deity
+    })
+    .limit(1)
+    .get();
+
+  const now = nowDate();
+  if (existing.data && existing.data.length > 0) {
+    // 更新已存在记录的更新时间
+    await db.collection('wish_profiles').doc(existing.data[0]._id).update({
+      data: { updated_at: now }
+    });
+    const updated = await db.collection('wish_profiles').doc(existing.data[0]._id).get();
+    return ok(updated.data);
+  }
+
+  // 创建新记录
+  const addRes = await db.collection('wish_profiles').add({
+    data: {
+      beneficiary_type: beneficiaryType,
+      beneficiary_desc: beneficiaryDesc,
+      deity: deity,
+      created_at: now,
+      updated_at: now
+    }
+  });
+
+  const doc = await db.collection('wish_profiles').doc(addRes._id).get();
+  return ok(doc.data);
+}
+
+async function handleProfileDelete(openid, data) {
+  const profileId = ensureString(data?.profile_id);
+  if (!profileId) return fail('缺少profile_id');
+
+  const doc = await db.collection('wish_profiles').doc(profileId).get().catch(() => null);
+  const profile = doc?.data || null;
+  if (!profile || profile._openid !== openid) return fail('记录不存在');
+
+  await db.collection('wish_profiles').doc(profileId).remove();
+  return ok({ deleted: true });
+}
+
+// 人员信息管理
+async function handlePersonList(openid, data) {
+  const res = await db
+    .collection('persons')
+    .where({ _openid: openid })
+    .orderBy('updated_at', 'desc')
+    .get();
+  return ok(res.data || []);
+}
+
+async function handlePersonCreate(openid, data) {
+  const name = ensureString(data?.name || '').trim();
+  const category = ensureString(data?.category || '').trim();
+  const idCard = ensureString(data?.id_card || '').trim();
+  const phone = ensureString(data?.phone || '').trim();
+
+  if (!name) return fail('姓名不能为空');
+
+  // 内容安全检查
+  const sec = await msgSecCheck(name);
+  if (!sec.safe) return fail(sec.reason);
+
+  if (idCard) {
+    const idCardSec = await msgSecCheck(idCard);
+    if (!idCardSec.safe) return fail('身份证号包含敏感内容');
+  }
+
+  if (phone) {
+    const phoneSec = await msgSecCheck(phone);
+    if (!phoneSec.safe) return fail('手机号包含敏感内容');
+  }
+
+  const now = nowDate();
+  const addRes = await db.collection('persons').add({
+    data: {
+      name: name,
+      category: category || null,
+      id_card: idCard || null,
+      phone: phone || null,
+      created_at: now,
+      updated_at: now
+    }
+  });
+
+  const doc = await db.collection('persons').doc(addRes._id).get();
+  return ok(doc.data);
+}
+
+async function handlePersonUpdate(openid, data) {
+  const personId = ensureString(data?.person_id);
+  const name = ensureString(data?.name || '').trim();
+  const category = ensureString(data?.category || '').trim();
+  const idCard = ensureString(data?.id_card || '').trim();
+  const phone = ensureString(data?.phone || '').trim();
+
+  if (!personId) return fail('缺少person_id');
+  if (!name) return fail('姓名不能为空');
+
+  const doc = await db.collection('persons').doc(personId).get().catch(() => null);
+  const person = doc?.data || null;
+  if (!person || person._openid !== openid) return fail('人员信息不存在');
+
+  // 内容安全检查
+  const sec = await msgSecCheck(name);
+  if (!sec.safe) return fail(sec.reason);
+
+  if (idCard) {
+    const idCardSec = await msgSecCheck(idCard);
+    if (!idCardSec.safe) return fail('身份证号包含敏感内容');
+  }
+
+  if (phone) {
+    const phoneSec = await msgSecCheck(phone);
+    if (!phoneSec.safe) return fail('手机号包含敏感内容');
+  }
+
+  const now = nowDate();
+  await db.collection('persons').doc(personId).update({
+    data: {
+      name: name,
+      category: category || null,
+      id_card: idCard || null,
+      phone: phone || null,
+      updated_at: now
+    }
+  });
+
+  const updated = await db.collection('persons').doc(personId).get();
+  return ok(updated.data);
+}
+
+async function handlePersonDelete(openid, data) {
+  const personId = ensureString(data?.person_id);
+  if (!personId) return fail('缺少person_id');
+
+  const doc = await db.collection('persons').doc(personId).get().catch(() => null);
+  const person = doc?.data || null;
+  if (!person || person._openid !== openid) return fail('人员信息不存在');
+
+  await db.collection('persons').doc(personId).remove();
+  return ok({ deleted: true });
+}
+
+// 分类管理
+async function handleCategoryList(openid, data) {
+  // 先获取用户自定义分类
+  const customRes = await db
+    .collection('person_categories')
+    .where({ _openid: openid })
+    .orderBy('created_at', 'asc')
+    .get();
+  
+  // 默认分类
+  const defaultCategories = [
+    { value: 'self', label: '自己', icon: '🧑', is_default: true },
+    { value: 'family', label: '家人', icon: '👨‍👩‍👧', is_default: true },
+    { value: 'child', label: '孩子', icon: '👶', is_default: true },
+    { value: 'couple', label: '姻缘', icon: '💑', is_default: true },
+    { value: 'other', label: '其他', icon: '👥', is_default: true }
+  ];
+
+  // 合并默认分类和自定义分类
+  const allCategories = [
+    ...defaultCategories.map(cat => ({ ...cat, id: cat.value, _id: cat.value })),
+    ...(customRes.data || []).map(cat => ({ ...cat, id: cat._id }))
+  ];
+
+  return ok(allCategories);
+}
+
+async function handleCategoryCreate(openid, data) {
+  const value = ensureString(data?.value || '').trim();
+  const label = ensureString(data?.label || '').trim();
+  const icon = ensureString(data?.icon || '').trim();
+
+  if (!value) return fail('分类值不能为空');
+  if (!label) return fail('分类名称不能为空');
+
+  // 检查是否已存在
+  const existing = await db
+    .collection('person_categories')
+    .where({ _openid: openid, value: value })
+    .limit(1)
+    .get();
+
+  if (existing.data && existing.data.length > 0) {
+    return fail('该分类已存在');
+  }
+
+  // 检查默认分类
+  const defaultValues = ['self', 'family', 'child', 'couple', 'other'];
+  if (defaultValues.includes(value)) {
+    return fail('不能使用默认分类值');
+  }
+
+  const sec = await msgSecCheck(label);
+  if (!sec.safe) return fail(sec.reason);
+
+  const now = nowDate();
+  const addRes = await db.collection('person_categories').add({
+    data: {
+      value: value,
+      label: label,
+      icon: icon || null,
+      is_default: false,
+      created_at: now,
+      updated_at: now
+    }
+  });
+
+  const doc = await db.collection('person_categories').doc(addRes._id).get();
+  return ok({ ...doc.data, id: doc.data._id });
+}
+
+async function handleCategoryUpdate(openid, data) {
+  const categoryId = ensureString(data?.category_id);
+  const label = ensureString(data?.label || '').trim();
+  const icon = ensureString(data?.icon || '').trim();
+
+  if (!categoryId) return fail('缺少category_id');
+  if (!label) return fail('分类名称不能为空');
+
+  const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
+  const category = doc?.data || null;
+  if (!category || category._openid !== openid) return fail('分类不存在');
+
+  if (category.is_default) {
+    return fail('默认分类不能修改');
+  }
+
+  const sec = await msgSecCheck(label);
+  if (!sec.safe) return fail(sec.reason);
+
+  const now = nowDate();
+  await db.collection('person_categories').doc(categoryId).update({
+    data: {
+      label: label,
+      icon: icon || null,
+      updated_at: now
+    }
+  });
+
+  const updated = await db.collection('person_categories').doc(categoryId).get();
+  return ok({ ...updated.data, id: updated.data._id });
+}
+
+async function handleCategoryDelete(openid, data) {
+  const categoryId = ensureString(data?.category_id);
+  if (!categoryId) return fail('缺少category_id');
+
+  const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
+  const category = doc?.data || null;
+  if (!category || category._openid !== openid) return fail('分类不存在');
+
+  if (category.is_default) {
+    return fail('默认分类不能删除');
+  }
+
+  // 检查是否有人员使用该分类
+  const personsRes = await db
+    .collection('persons')
+    .where({ _openid: openid, category: category.value })
+    .count();
+  
+  if (personsRes.total > 0) {
+    return fail('该分类下还有人员，无法删除');
+  }
+
+  await db.collection('person_categories').doc(categoryId).remove();
+  return ok({ deleted: true });
+}
+
 async function route(action, openid, data) {
   switch (action) {
     case 'auth.login':
@@ -489,6 +788,28 @@ async function route(action, openid, data) {
       return handleTodosDelete(openid, data);
     case 'payment.create':
       return handlePaymentCreate(openid, data);
+    case 'profile.list':
+      return handleProfileList(openid, data);
+    case 'profile.create':
+      return handleProfileCreate(openid, data);
+    case 'profile.delete':
+      return handleProfileDelete(openid, data);
+    case 'person.list':
+      return handlePersonList(openid, data);
+    case 'person.create':
+      return handlePersonCreate(openid, data);
+    case 'person.update':
+      return handlePersonUpdate(openid, data);
+    case 'person.delete':
+      return handlePersonDelete(openid, data);
+    case 'category.list':
+      return handleCategoryList(openid, data);
+    case 'category.create':
+      return handleCategoryCreate(openid, data);
+    case 'category.update':
+      return handleCategoryUpdate(openid, data);
+    case 'category.delete':
+      return handleCategoryDelete(openid, data);
     default:
       return fail(`未知 action: ${action}`);
   }

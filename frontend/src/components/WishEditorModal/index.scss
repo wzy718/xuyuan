@@ -225,6 +225,607 @@
   white-space: pre-wrap;
 }
 
+/* 字段标题行 */
+.wish-modal__field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
+/* 字段操作按钮组 */
+.wish-modal__field-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 管理按钮 */
+.wish-modal__manage-btn {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 4rpx 12rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+}
+
+/* 历史记录按钮 */
+.wish-modal__history-btn {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 4rpx 12rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+}
+
+/* 输入框包装器 */
+.wish-modal__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.wish-modal__input-wrapper .wish-modal__input {
+  flex: 1;
+}
+
+/* 保存按钮 */
+.wish-modal__save-btn {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 8rpx 16rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+  white-space: nowrap;
+}
+
+/* 历史记录选择弹窗 */
+.wish-modal__profile-selector {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 44, 44, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 24rpx;
+}
+
+.wish-modal__profile-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 20rpx;
+  background: #fdfbf7;
+  border-radius: 20rpx 20rpx 0 0;
+  border-bottom: 1rpx solid var(--bb-border);
+}
+
+.wish-modal__profile-selector-title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.wish-modal__profile-selector-close {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+  padding: 8rpx 12rpx;
+}
+
+.wish-modal__profile-list {
+  background: #fdfbf7;
+  border-radius: 0 0 20rpx 20rpx;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12rpx 20rpx 20rpx;
+}
+
+.wish-modal__profile-item {
+  padding: 16rpx;
+  margin-bottom: 8rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.2);
+  transition: all 0.2s;
+}
+
+.wish-modal__profile-item:active {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: var(--bb-gold);
+}
+
+.wish-modal__profile-text {
+  font-size: 28rpx;
+  color: var(--bb-ink);
+  display: block;
+  margin-bottom: 4rpx;
+}
+
+.wish-modal__profile-desc {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+  display: block;
+}
+
+.wish-modal__profile-empty {
+  text-align: center;
+  color: var(--bb-muted);
+  font-size: 26rpx;
+  padding: 40rpx 0;
+}
+
+/* 分类选择选项 */
+.wish-modal__category-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 12rpx;
+}
+
+.wish-modal__category-option {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid rgba(201, 169, 98, 0.3);
+  background: #fff;
+  transition: all 0.2s;
+}
+
+.wish-modal__category-option.is-active {
+  border-color: var(--bb-gold);
+  background: rgba(201, 169, 98, 0.1);
+}
+
+.wish-modal__category-icon {
+  font-size: 24rpx;
+}
+
+.wish-modal__category-label {
+  font-size: 24rpx;
+  color: var(--bb-ink);
+}
+
+.wish-modal__category-option.is-active .wish-modal__category-label {
+  color: var(--bb-gold-strong);
+  font-weight: 500;
+}
+
+/* 下拉选择器 */
+.wish-modal__picker {
+  width: 100%;
+  min-height: 72rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.3);
+  border-radius: 14rpx;
+  padding: 16rpx 20rpx;
+  background: #fff;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+}
+
+.wish-modal__picker-selected {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  width: 100%;
+}
+
+.wish-modal__picker-placeholder {
+  color: #999;
+  font-size: 28rpx;
+}
+
+/* 分类名称输入框（带图标选择） */
+.wish-modal__category-name-input {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.wish-modal__icon-picker {
+  min-width: 80rpx;
+  height: 72rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.3);
+  border-radius: 14rpx;
+  padding: 0 16rpx;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.wish-modal__icon-display {
+  font-size: 36rpx;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 默认图标（浅灰色线框图） */
+.wish-modal__icon-default {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wish-modal__icon-outline {
+  width: 40rpx;
+  height: 40rpx;
+  border: 2rpx solid #d0d0d0;
+  border-radius: 50%;
+  background: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wish-modal__icon-eye {
+  width: 6rpx;
+  height: 6rpx;
+  border-radius: 50%;
+  background: #d0d0d0;
+  position: absolute;
+  top: 12rpx;
+}
+
+.wish-modal__icon-eye:first-of-type {
+  left: 10rpx;
+}
+
+.wish-modal__icon-eye:last-of-type {
+  right: 10rpx;
+}
+
+.wish-modal__icon-mouth {
+  width: 16rpx;
+  height: 8rpx;
+  border: 2rpx solid #d0d0d0;
+  border-top: none;
+  border-radius: 0 0 16rpx 16rpx;
+  position: absolute;
+  bottom: 10rpx;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Emoji 选择器弹窗 */
+.wish-modal__emoji-picker {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 44, 44, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+  padding: 24rpx;
+}
+
+.wish-modal__emoji-picker-content {
+  width: 100%;
+  max-width: 600rpx;
+  max-height: 80vh;
+  background: #fdfbf7;
+  border-radius: 20rpx;
+  border: 1rpx solid var(--bb-border);
+  box-shadow: var(--bb-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.wish-modal__emoji-picker-header {
+  padding: 16rpx 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1rpx solid rgba(201, 169, 98, 0.2);
+}
+
+.wish-modal__emoji-picker-title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.wish-modal__emoji-picker-close {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+  padding: 8rpx 12rpx;
+}
+
+.wish-modal__emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 8rpx;
+  padding: 20rpx;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.wish-modal__emoji-item {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8rpx;
+  background: #fff;
+  border: 1rpx solid transparent;
+  transition: all 0.2s;
+}
+
+.wish-modal__emoji-item:active {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: var(--bb-gold);
+}
+
+.wish-modal__emoji-item.is-selected {
+  background: rgba(201, 169, 98, 0.15);
+  border-color: var(--bb-gold);
+}
+
+.wish-modal__emoji-text {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.wish-modal__input--with-icon {
+  flex: 1;
+}
+
+/* 人员列表 */
+.wish-modal__person-list {
+  margin-top: 12rpx;
+}
+
+.wish-modal__person-header {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 8rpx;
+}
+
+.wish-modal__person-category-tag {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 8rpx;
+  background: rgba(201, 169, 98, 0.1);
+  border: 1rpx solid rgba(201, 169, 98, 0.3);
+}
+
+.wish-modal__person-category-icon {
+  font-size: 20rpx;
+}
+
+.wish-modal__person-category-label {
+  font-size: 20rpx;
+  color: var(--bb-gold-strong);
+}
+
+.wish-modal__person-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx;
+  margin-bottom: 12rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.2);
+  transition: all 0.2s;
+}
+
+.wish-modal__person-item:active {
+  background: rgba(201, 169, 98, 0.05);
+}
+
+.wish-modal__person-info {
+  flex: 1;
+}
+
+.wish-modal__person-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--bb-ink);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.wish-modal__person-detail {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+  display: block;
+  line-height: 1.6;
+  margin-bottom: 4rpx;
+}
+
+.wish-modal__person-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.wish-modal__person-edit {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 8rpx 16rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+}
+
+.wish-modal__person-delete {
+  font-size: 24rpx;
+  color: #ff6b6b;
+  padding: 8rpx 16rpx;
+  border: 1rpx solid #ff6b6b;
+  border-radius: 8rpx;
+}
+
+.wish-modal__person-empty {
+  text-align: center;
+  color: var(--bb-muted);
+  font-size: 26rpx;
+  padding: 40rpx 0;
+}
+
+/* 已选择人员信息 */
+.wish-modal__selected-person {
+  margin-top: 12rpx;
+  padding: 12rpx;
+  background: rgba(201, 169, 98, 0.05);
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.2);
+}
+
+.wish-modal__selected-person-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wish-modal__selected-person-label {
+  font-size: 26rpx;
+  color: var(--bb-ink);
+  font-weight: 500;
+}
+
+.wish-modal__selected-person-hint {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+}
+
+.wish-modal__selected-person-btn {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 6rpx 16rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+}
+
+.wish-modal__selected-person-change {
+  font-size: 24rpx;
+  color: var(--bb-gold);
+  padding: 6rpx 16rpx;
+  border: 1rpx solid var(--bb-gold);
+  border-radius: 8rpx;
+}
+
+/* 人员选择器弹窗 */
+.wish-modal__person-selector {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 44, 44, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+  padding: 24rpx;
+}
+
+.wish-modal__person-selector-content {
+  width: 100%;
+  max-width: 600rpx;
+  max-height: 70vh;
+  background: #fdfbf7;
+  border-radius: 20rpx;
+  border: 1rpx solid var(--bb-border);
+  box-shadow: var(--bb-shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.wish-modal__person-selector-header {
+  padding: 16rpx 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1rpx solid rgba(201, 169, 98, 0.2);
+}
+
+.wish-modal__person-selector-title {
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.wish-modal__person-selector-close {
+  font-size: 26rpx;
+  color: var(--bb-muted);
+  padding: 8rpx 12rpx;
+}
+
+.wish-modal__person-selector-list {
+  padding: 20rpx;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.wish-modal__person-selector-item {
+  padding: 16rpx;
+  margin-bottom: 12rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.2);
+  transition: all 0.2s;
+}
+
+.wish-modal__person-selector-item:active {
+  background: rgba(201, 169, 98, 0.1);
+  border-color: var(--bb-gold);
+}
+
+.wish-modal__person-selector-item.is-selected {
+  background: rgba(201, 169, 98, 0.15);
+  border-color: var(--bb-gold);
+}
+
+.wish-modal__person-selector-info {
+  flex: 1;
+}
+
+.wish-modal__person-selector-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--bb-ink);
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.wish-modal__person-selector-detail {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+  display: block;
+  line-height: 1.6;
+  margin-bottom: 4rpx;
+}
+
+.wish-modal__person-selector-empty {
+  text-align: center;
+  padding: 60rpx 20rpx;
+}
+
+.wish-modal__person-selector-empty-text {
+  font-size: 28rpx;
+  color: var(--bb-ink);
+  display: block;
+  margin-bottom: 12rpx;
+}
+
+.wish-modal__person-selector-empty-hint {
+  font-size: 24rpx;
+  color: var(--bb-muted);
+  display: block;
+  margin-bottom: 24rpx;
+}
+
 /* 底部按钮区域 */
 .wish-modal__footer {
   padding: 0 20rpx 20rpx;

@@ -108,3 +108,53 @@ export const paymentAPI = {
   }
 }
 
+export const profileAPI = {
+  async getList() {
+    return callFunction<Array<any>>('profile.list', {})
+  },
+
+  async create(profile: { beneficiary_type: string; beneficiary_desc?: string; deity: string }) {
+    return callFunction('profile.create', profile)
+  },
+
+  async delete(profileId: string) {
+    return callFunction('profile.delete', { profile_id: profileId })
+  }
+}
+
+export const personAPI = {
+  async getList() {
+    return callFunction<Array<any>>('person.list', {})
+  },
+
+  async create(person: { name: string; category?: string; id_card?: string; phone?: string }) {
+    return callFunction('person.create', person)
+  },
+
+  async update(personId: string, person: { name: string; category?: string; id_card?: string; phone?: string }) {
+    return callFunction('person.update', { person_id: personId, ...person })
+  },
+
+  async delete(personId: string) {
+    return callFunction('person.delete', { person_id: personId })
+  }
+}
+
+export const categoryAPI = {
+  async getList() {
+    return callFunction<Array<any>>('category.list', {})
+  },
+
+  async create(category: { value: string; label: string; icon?: string }) {
+    return callFunction('category.create', category)
+  },
+
+  async update(categoryId: string, category: { label: string; icon?: string }) {
+    return callFunction('category.update', { category_id: categoryId, ...category })
+  },
+
+  async delete(categoryId: string) {
+    return callFunction('category.delete', { category_id: categoryId })
+  }
+}
+
