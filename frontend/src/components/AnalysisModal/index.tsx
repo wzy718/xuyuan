@@ -36,6 +36,11 @@ export default function AnalysisModal({
     console.log('AnalysisModal - result:', JSON.stringify(result, null, 2))
   }
 
+  // 如果缺失要素为空或仅包含“基本要素齐全”之类的提示，认为整体表达已达标
+  const isQualified = !result?.missing_elements ||
+    result.missing_elements.length === 0 ||
+    result.missing_elements.every((item) => item.indexOf('基本要素齐全') !== -1)
+
   return (
     <View className="analysis-modal-mask" onClick={onClose}>
       <View className="analysis-modal" onClick={(e) => e.stopPropagation()}>
@@ -93,40 +98,44 @@ export default function AnalysisModal({
               </View>
             </View>
 
-            {/* 可能失败的原因 */}
-            <View className="result-section">
-              <View className="section-header">
-                <Text className="section-icon">💭</Text>
-                <Text className="section-title">可能导致许愿失败的原因</Text>
+            {/* 可能失败的原因（仅在不达标时展示） */}
+            {!isQualified && (
+              <View className="result-section">
+                <View className="section-header">
+                  <Text className="section-icon">💭</Text>
+                  <Text className="section-title">可能导致许愿失败的原因</Text>
+                </View>
+                <View className="section-content">
+                  {result.possible_reasons?.length > 0 ? (
+                    result.possible_reasons.map((item, index) => (
+                      <View key={index} className="list-item reason">
+                        <Text className="item-bullet">•</Text>
+                        <Text className="item-text">{item}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text className="empty-text">暂无分析结果</Text>
+                  )}
+                </View>
               </View>
-              <View className="section-content">
-                {result.possible_reasons?.length > 0 ? (
-                  result.possible_reasons.map((item, index) => (
-                    <View key={index} className="list-item reason">
-                      <Text className="item-bullet">•</Text>
-                      <Text className="item-text">{item}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text className="empty-text">暂无分析结果</Text>
-                )}
-              </View>
-            </View>
+            )}
 
-            {/* 类似失败案例 - 强制显示 */}
-            <View className="result-section">
-              <View className="section-header">
-                <Text className="section-icon">📖</Text>
-                <Text className="section-title">类似失败案例</Text>
+            {/* 类似失败案例（仅在不达标时展示） */}
+            {!isQualified && (
+              <View className="result-section">
+                <View className="section-header">
+                  <Text className="section-icon">📖</Text>
+                  <Text className="section-title">类似失败案例</Text>
+                </View>
+                <View className="section-content case-box">
+                  <Text className="case-text">
+                    {result.failure_case || '许愿时缺少明确目标和时间，导致难以实现'}
+                  </Text>
+                </View>
               </View>
-              <View className="section-content case-box">
-                <Text className="case-text">
-                  {result.failure_case || '许愿时缺少明确目标和时间，导致难以实现'}
-                </Text>
-              </View>
-            </View>
+            )}
 
-            {/* 正确姿势 - 强制显示 */}
+            {/* 正确姿势（无论是否达标都会展示，达标时偏向鼓励） */}
             <View className="result-section">
               <View className="section-header">
                 <Text className="section-icon">✨</Text>

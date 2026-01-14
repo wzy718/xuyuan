@@ -113,6 +113,10 @@ async function quickAnalyzeWish(wishText, deity = '') {
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
 
+  // 调试：打印发送给 DeepSeek 的 prompt（注意不要在生产环境长期开启，避免日志过大）
+  console.log('quickAnalyzeWish - systemPrompt:', systemPrompt)
+  console.log('quickAnalyzeWish - userPrompt:', userPrompt)
+
   const response = await axios.post(
     DEEPSEEK_API_URL,
     {
@@ -206,6 +210,10 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
+
+  // 调试：打印发送给 DeepSeek 的完整优化 prompt
+  console.log('fullAnalyzeWish - systemPrompt:', systemPrompt)
+  console.log('fullAnalyzeWish - userPrompt:', userPrompt)
 
   const response = await axios.post(
     DEEPSEEK_API_URL,
