@@ -80,43 +80,27 @@ async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
     throw new Error('DeepSeek API Key未配置');
   }
 
-  const systemPrompt = `你是一个专业的愿望分析助手。请分析用户提供的愿望，找出缺失的要素和潜在问题，并提供优化建议。
-
-分析维度：
-1. 缺失要素：时间范围、目标量化、方式边界、行动承诺、还愿/回向等
-2. 潜在原因：表达抽象、目标不可验证、边界不清、与现实约束冲突、过度执念等
-3. 优化建议：提供优化后的许愿稿、结构化字段建议、具体步骤
-
-要求：
-- 输出JSON格式
-- 缺失要素和潜在原因用数组列出
-- 优化建议要具体、可操作
-- 确保内容合法合规，不涉及伤害他人、违法、赌博等
-- 如果检测到不当内容，建议调整为善意、合法的表达
-
-输出格式：
+  const systemPrompt = `你是愿望分析助手。分析愿望的缺失要素和问题，提供优化建议。直接输出JSON，格式：
 {
-  "missing_elements": ["时间范围", "目标量化"],
-  "possible_reasons": ["表达过于抽象", "目标不可验证"],
+  "missing_elements": ["缺失要素1", "缺失要素2"],
+  "possible_reasons": ["原因1", "原因2"],
   "optimized_text": "优化后的许愿稿",
   "structured_suggestion": {
-    "time_range": "建议时间范围",
-    "target_quantify": "建议量化目标",
-    "way_boundary": "建议方式边界",
-    "action_commitment": "建议行动承诺",
-    "return_wish": "建议还愿/回向"
+    "time_range": "时间范围",
+    "target_quantify": "量化目标",
+    "way_boundary": "方式边界",
+    "action_commitment": "行动承诺",
+    "return_wish": "还愿/回向"
   },
-  "steps": ["步骤1", "步骤2", "步骤3"],
-  "warnings": ["合规提示"]
-}`;
+  "steps": ["步骤1", "步骤2"],
+  "warnings": []
+}
+要求：简洁、可操作、合法合规。`;
 
-  const userPrompt = `请分析以下愿望：
+  const userPrompt = `分析愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
-  }
-愿望内容：${wishText}
-
-请提供详细的分析和优化建议。`;
+  }愿望：${wishText}`;
 
   const response = await axios.post(
     DEEPSEEK_API_URL,
@@ -126,14 +110,15 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.7,
-      max_tokens: 2000
+      temperature: 0.3, // 降低温度，响应更快更确定
+      max_tokens: 1200 // 减少最大token数，加快响应
     },
     {
       headers: {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 50000 // 50秒超时（留10秒余量给云函数）
     }
   );
 
