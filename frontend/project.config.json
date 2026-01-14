@@ -3,7 +3,7 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "projectname": "baibai-miniprogram",
   "description": "拜拜微信小程序",
-  "appid": "wx0665630e0a009774",
+  "appid": "wxf5dcea93be742a21",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -39,5 +39,6 @@
   },
   "editorSetting": {},
   "cloudfunctionTemplateRoot": "cloudfunctionTemplate/",
-  "cloudbaseRoot": "cloudfunctions/"
+  "cloudbaseRoot": "cloudfunctions/",
+  "libVersion": "3.13.2"
 }

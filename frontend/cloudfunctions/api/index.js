@@ -585,25 +585,30 @@ async function handleTodosCreate(openid, data) {
   if (!sec.safe) return fail(sec.reason);
 
   const now = nowDate();
+  const wishData = {
+    beneficiary_type: ensureString(data?.beneficiary_type) || null,
+    beneficiary_desc: ensureString(data?.beneficiary_desc) || null,
+    deity: ensureString(data?.deity) || null,
+    wish_text: wishText,
+    time_range: ensureString(data?.time_range) || null,
+    target_quantify: ensureString(data?.target_quantify) || null,
+    way_boundary: ensureString(data?.way_boundary) || null,
+    action_commitment: ensureString(data?.action_commitment) || null,
+    return_wish: ensureString(data?.return_wish) || null,
+    status: 0,
+    created_at: now,
+    updated_at: now
+  };
+  
   const addRes = await db.collection('wishes').add({
-    data: {
-      beneficiary_type: ensureString(data?.beneficiary_type) || null,
-      beneficiary_desc: ensureString(data?.beneficiary_desc) || null,
-      deity: ensureString(data?.deity) || null,
-      wish_text: wishText,
-      time_range: ensureString(data?.time_range) || null,
-      target_quantify: ensureString(data?.target_quantify) || null,
-      way_boundary: ensureString(data?.way_boundary) || null,
-      action_commitment: ensureString(data?.action_commitment) || null,
-      return_wish: ensureString(data?.return_wish) || null,
-      status: 0,
-      created_at: now,
-      updated_at: now
-    }
+    data: wishData
   });
 
-  const doc = await db.collection('wishes').doc(addRes._id).get();
-  return ok(doc.data);
+  // 返回完整的数据，包含 _id
+  return ok({
+    _id: addRes._id,
+    ...wishData
+  });
 }
 
 async function handleTodosUpdate(openid, data) {
