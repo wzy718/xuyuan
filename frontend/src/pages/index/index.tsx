@@ -4,6 +4,7 @@ import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro'
 import { authAPI, wishAPI, unlockAPI } from '../../utils/api'
 import { useAppStore } from '../../store'
 import type { AnalysisResult } from '../../types'
+import AnalysisModal from '../../components/AnalysisModal'
 import './index.scss'
 
 export default function Index() {
@@ -19,6 +20,7 @@ export default function Index() {
   } | null>(null)
   const [pendingAnalyze, setPendingAnalyze] = useState(false)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [showModal, setShowModal] = useState(false)
 
   const handleLogin = async () => {
     if (loggingIn) return // 防止重复点击
@@ -140,18 +142,26 @@ export default function Index() {
       })
       return
     }
+    // 先显示弹窗和加载动画
+    setShowModal(true)
     setAnalyzing(true)
+    setUnlocked(false)
+    setAnalysisResult(null)
+    
     try {
       const response = await wishAPI.analyze(wishText, prefillDeity || '')
+      console.log('handleAnalyze - response:', JSON.stringify(response, null, 2))
       if (response.code === 0) {
+        console.log('handleAnalyze - setting result:', JSON.stringify(response.data, null, 2))
         setAnalysisResult(response.data)
-        setUnlocked(false)
-        Taro.showToast({ title: '分析完成', icon: 'success' })
       } else {
         Taro.showToast({ title: response.msg || '分析失败', icon: 'none' })
+        setShowModal(false)
       }
     } catch (error: any) {
+      console.error('handleAnalyze - error:', error)
       Taro.showToast({ title: error.message || '分析失败', icon: 'none' })
+      setShowModal(false)
     } finally {
       setAnalyzing(false)
     }
@@ -159,7 +169,8 @@ export default function Index() {
 
   const handleUnlockByAd = async () => {
     if (!analysisResult) return
-    Taro.showLoading({ title: '观看广告中...' })
+    Taro.showLoading({ title: '正在解锁...' })
+    // 模拟广告观看
     setTimeout(async () => {
       try {
         const response = await unlockAPI.unlockByAd(
@@ -181,7 +192,7 @@ export default function Index() {
       } finally {
         Taro.hideLoading()
       }
-    }, 1500)
+    }, 1000)
   }
 
   const handleUnlockByShare = () => {
@@ -203,7 +214,24 @@ export default function Index() {
       action_commitment: analysisResult.full_result.structured_suggestion?.action_commitment || '',
       return_wish: analysisResult.full_result.structured_suggestion?.return_wish || ''
     })
+    setShowModal(false)
     Taro.switchTab({ url: '/pages/wishes/index' })
+  }
+
+  const handleCopyText = () => {
+    if (!analysisResult?.full_result?.optimized_text) return
+    Taro.setClipboardData({
+      data: analysisResult.full_result.optimized_text,
+      success: () => {
+        Taro.showToast({ title: '已复制', icon: 'success' })
+      }
+    })
+  }
+
+  const handleCloseModal = () => {
+    if (!analyzing) {
+      setShowModal(false)
+    }
   }
 
   return (
@@ -246,74 +274,6 @@ export default function Index() {
         </View>
       </View>
 
-      {analysisResult && (
-        <View className="bb-section">
-          <View className="bb-card index-result">
-            <Text className="bb-card-title">分析结果</Text>
-            <View className="index-result__grid">
-              <View className="index-result__panel">
-                <Text className="index-result__title">缺失要素</Text>
-                {analysisResult.missing_elements?.map((item, index) => (
-                  <Text key={index} className="index-result__item">
-                    • {item}
-                  </Text>
-                ))}
-              </View>
-              <View className="index-result__panel">
-                <Text className="index-result__title">潜在原因</Text>
-                {analysisResult.possible_reasons?.map((item, index) => (
-                  <Text key={index} className="index-result__item">
-                    • {item}
-                  </Text>
-                ))}
-              </View>
-            </View>
-
-            {!unlocked && (
-              <View className="index-unlock">
-                <Text className="index-result__title">正确姿势（需解锁）</Text>
-                <View className="index-unlock__actions">
-                  <Button className="bb-btn-outline" onClick={handleUnlockByAd}>
-                    看广告解锁
-                  </Button>
-                  <Button className="bb-btn-outline" openType="share" onClick={handleUnlockByShare}>
-                    分享解锁
-                  </Button>
-                </View>
-              </View>
-            )}
-
-            {unlocked && analysisResult.full_result && (
-              <View className="index-full">
-                <Text className="index-result__title">优化后的许愿稿</Text>
-                <Text className="index-full__text">{analysisResult.full_result.optimized_text}</Text>
-                <Text className="index-result__title">建议步骤</Text>
-                {analysisResult.full_result.steps?.map((step, index) => (
-                  <Text key={index} className="index-result__item">
-                    {index + 1}. {step}
-                  </Text>
-                ))}
-                <View className="index-full__actions">
-                  <Button
-                    className="bb-btn-ghost"
-                    onClick={() =>
-                      Taro.setClipboardData({
-                        data: analysisResult.full_result?.optimized_text || ''
-                      })
-                    }
-                  >
-                    复制许愿稿
-                  </Button>
-                  <Button className="bb-btn-primary" onClick={handleRecordWish}>
-                    记录到我的愿望
-                  </Button>
-                </View>
-              </View>
-            )}
-          </View>
-        </View>
-      )}
-
       <View className="bb-section">
         <View className="bb-card index-disclaimer">
           <Text className="bb-muted">
@@ -321,6 +281,19 @@ export default function Index() {
           </Text>
         </View>
       </View>
+
+      {/* 分析结果弹窗 */}
+      <AnalysisModal
+        visible={showModal}
+        analyzing={analyzing}
+        result={analysisResult}
+        onClose={handleCloseModal}
+        onUnlockByAd={handleUnlockByAd}
+        onUnlockByShare={handleUnlockByShare}
+        onRecordWish={handleRecordWish}
+        onCopyText={handleCopyText}
+        unlocked={unlocked}
+      />
     </ScrollView>
   )
 }

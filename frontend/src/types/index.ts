@@ -31,6 +31,8 @@ export interface AnalysisResult {
   analysis_id: string
   missing_elements: string[]
   possible_reasons: string[]
+  failure_case?: string // 类似失败案例
+  correct_posture?: string // 正确姿势
   locked: boolean
   unlock_token: string
   unlock_token_expires_at: number

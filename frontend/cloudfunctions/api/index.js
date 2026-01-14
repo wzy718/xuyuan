@@ -53,8 +53,8 @@ async function msgSecCheck(text) {
     return { safe: false, reason: '内容不能为空' };
   }
 
-  if (content.length > 1000) {
-    return { safe: false, reason: '内容过长，请控制在1000字以内' };
+  if (content.length > 300) {
+    return { safe: false, reason: '内容过长，请控制在300字以内' };
   }
 
   const localCheck = checkSensitiveWords(content);
@@ -75,15 +75,121 @@ function generateUnlockToken() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
+/**
+ * 快速分析愿望（用于首页弹窗展示）
+ * 返回：缺失要素、失败原因、失败案例、正确姿势
+ * 特点：prompt 简洁，响应快速
+ */
+async function quickAnalyzeWish(wishText, deity = '') {
   if (!DEEPSEEK_API_KEY) {
     throw new Error('DeepSeek API Key未配置');
   }
 
-  const systemPrompt = `你是愿望分析助手。分析愿望的缺失要素和问题，提供优化建议。直接输出JSON，格式：
+  const systemPrompt = `你是愿望分析师。分析用户愿望是否符合标准，输出JSON格式：
+{"missing":["缺失要素1","缺失要素2"],"reasons":["失败原因1","失败原因2"],"case":"类似失败案例的具体描述","posture":"正确许愿姿势的简短建议","is_qualified":true/false}
+
+评价标准（5个要素）：
+1. 时间边界：是否包含明确时间（如"3个月内"、"2026年内"等）
+2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer等）
+3. 方式与边界：是否包含合法合规、不伤害他人等表述
+4. 行动承诺：是否包含"我会"、"我愿意"、"每天"等行动表述
+5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
+6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号
+
+输出要求：
+1. 如果愿望符合标准（is_qualified=true）：
+   - missing为空数组[]或["基本要素齐全，可进一步润色"]
+   - reasons为空数组[]或["表达清晰，建议保持行动承诺并定期复盘"]
+   - case给出一个成功案例或正面案例，20-100字
+   - posture给出进一步优化建议或鼓励性建议，30字内
+   
+2. 如果愿望不符合标准（is_qualified=false）：
+   - missing列出缺失的要素，2-3条，每条15字内
+   - reasons列出失败原因，2-3条，每条15字内
+   - case给出一个真实具体的失败案例，包含：谁、许了什么愿、为什么失败、结果如何。字数20-100字
+   - posture给出具体可行的建议，30字内
+
+3. 所有内容简洁有力，直击要害`;
+
+  const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
+
+  const response = await axios.post(
+    DEEPSEEK_API_URL,
+    {
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 500
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    }
+  );
+
+  const content = response.data?.choices?.[0]?.message?.content || '';
+
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
+    
+    const isQualified = parsed.is_qualified === true || parsed.is_qualified === 'true';
+    
+    // 如果符合标准，使用正面反馈
+    if (isQualified) {
+      const result = {
+        missing_elements: parsed.missing && parsed.missing.length > 0 
+          ? parsed.missing 
+          : ['基本要素齐全，可进一步润色表达'],
+        possible_reasons: parsed.reasons && parsed.reasons.length > 0
+          ? parsed.reasons
+          : ['表达清晰，建议保持行动承诺并定期复盘'],
+        failure_case: parsed.case || '某用户许愿"希望在3个月内找到月薪8000元以上的前端开发工作，我会每天投递5份简历并学习新技术，成功后我会还愿并捐款100元"。因为目标明确、时间清晰、行动具体，最终在2个月内成功入职心仪公司。',
+        correct_posture: parsed.posture || '您的愿望表达已经很规范，建议继续保持并定期复盘进度，必要时可调整时间或目标'
+      };
+      
+      console.log('quickAnalyzeWish - qualified result:', JSON.stringify(result, null, 2));
+      return result;
+    }
+    
+    // 如果不符合标准，使用问题分析
+    const result = {
+      missing_elements: parsed.missing || [],
+      possible_reasons: parsed.reasons || [],
+      failure_case: parsed.case || '某用户许愿"希望找到好工作"，但未明确具体岗位、薪资范围和时间期限。半年后仍未找到满意工作，因为目标模糊导致求职方向不明确，投递简历时缺乏针对性，最终只能接受一份并不理想的工作。',
+      correct_posture: parsed.posture || '明确目标、设定时间、承诺行动、许下还愿'
+    };
+    
+    console.log('quickAnalyzeWish - unqualified result:', JSON.stringify(result, null, 2));
+    return result;
+  } catch (error) {
+    console.error('quickAnalyzeWish - parse error:', error, 'content:', content);
+    return {
+      missing_elements: ['愿望表述不够清晰', '缺少具体目标'],
+      possible_reasons: ['缺少时间限制', '没有量化标准'],
+      failure_case: '某用户许愿"希望找到好工作"，但未明确具体岗位、薪资范围和时间期限。半年后仍未找到满意工作，因为目标模糊导致求职方向不明确，投递简历时缺乏针对性，最终只能接受一份并不理想的工作。',
+      correct_posture: '明确目标金额、设定实现时间、承诺具体行动、许下还愿方式'
+    };
+  }
+}
+
+/**
+ * 完整分析愿望（解锁后使用）
+ * 返回：优化文案、结构化建议、步骤
+ */
+async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
+  if (!DEEPSEEK_API_KEY) {
+    throw new Error('DeepSeek API Key未配置');
+  }
+
+  const systemPrompt = `愿望优化师。输出JSON：
 {
-  "missing_elements": ["缺失要素1", "缺失要素2"],
-  "possible_reasons": ["原因1", "原因2"],
   "optimized_text": "优化后的许愿稿",
   "structured_suggestion": {
     "time_range": "时间范围",
@@ -92,12 +198,11 @@ async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
     "action_commitment": "行动承诺",
     "return_wish": "还愿/回向"
   },
-  "steps": ["步骤1", "步骤2"],
-  "warnings": []
+  "steps": ["步骤1", "步骤2", "步骤3"]
 }
-要求：简洁、可操作、合法合规。`;
+要求：简洁实用，步骤3-5条。`;
 
-  const userPrompt = `分析愿望：
+  const userPrompt = `优化愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
@@ -110,15 +215,15 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.3, // 降低温度，响应更快更确定
-      max_tokens: 1200 // 减少最大token数，加快响应
+      temperature: 0.3,
+      max_tokens: 800
     },
     {
       headers: {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      timeout: 50000 // 50秒超时（留10秒余量给云函数）
+      timeout: 30000
     }
   );
 
@@ -130,14 +235,31 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
     return JSON.parse(content);
   } catch (error) {
     return {
-      missing_elements: [],
-      possible_reasons: [],
-      optimized_text: content,
+      optimized_text: content || wishText,
       structured_suggestion: {},
       steps: [],
       warnings: []
     };
   }
+}
+
+// 保留旧函数兼容性
+async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
+  // 先做快速分析
+  const quickResult = await quickAnalyzeWish(wishText, deity);
+  // 再做完整分析
+  const fullResult = await fullAnalyzeWish(wishText, deity, profile);
+  
+  return {
+    missing_elements: quickResult.missing_elements,
+    possible_reasons: quickResult.possible_reasons,
+    failure_case: quickResult.failure_case,
+    correct_posture: quickResult.correct_posture,
+    optimized_text: fullResult.optimized_text,
+    structured_suggestion: fullResult.structured_suggestion,
+    steps: fullResult.steps,
+    warnings: fullResult.warnings || []
+  };
 }
 
 /**
@@ -289,7 +411,6 @@ async function handleAuthLogin(openid, data) {
 async function handleWishAnalyze(openid, data) {
   const wishText = ensureString(data?.wish_text);
   const deity = ensureString(data?.deity);
-  const profile = data?.profile || {};
 
   const sec = await msgSecCheck(wishText);
   if (!sec.safe) return fail(sec.reason);
@@ -297,9 +418,8 @@ async function handleWishAnalyze(openid, data) {
   const allowed = await enforceHourlyLimit(openid, 'analyses', 20);
   if (!allowed) return fail('请求过于频繁，请稍后再试', -1);
 
-  const analysisResult = await analyzeWishByDeepSeek(wishText, deity, profile);
-  const missingElements = analysisResult.missing_elements || [];
-  const possibleReasons = analysisResult.possible_reasons || [];
+  // 只做快速分析，返回速度更快
+  const quickResult = await quickAnalyzeWish(wishText, deity);
 
   const unlockToken = generateUnlockToken();
   const unlockTokenExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -309,16 +429,14 @@ async function handleWishAnalyze(openid, data) {
     data: {
       wish_id: data?.wish_id || null,
       wish_text: wishText,
+      deity: deity,
       analysis_result: {
-        missing_elements: missingElements,
-        possible_reasons: possibleReasons
+        missing_elements: quickResult.missing_elements,
+        possible_reasons: quickResult.possible_reasons,
+        failure_case: quickResult.failure_case,
+        correct_posture: quickResult.correct_posture
       },
-      full_result: {
-        optimized_text: analysisResult.optimized_text || '',
-        structured_suggestion: analysisResult.structured_suggestion || {},
-        steps: analysisResult.steps || [],
-        warnings: analysisResult.warnings || []
-      },
+      full_result: null, // 解锁时再生成
       unlocked: false,
       unlock_token: unlockToken,
       unlock_token_expires_at: unlockTokenExpiresAt,
@@ -329,8 +447,10 @@ async function handleWishAnalyze(openid, data) {
 
   return ok({
     analysis_id: addRes._id,
-    missing_elements: missingElements,
-    possible_reasons: possibleReasons,
+    missing_elements: quickResult.missing_elements,
+    possible_reasons: quickResult.possible_reasons,
+    failure_case: quickResult.failure_case,
+    correct_posture: quickResult.correct_posture,
     locked: true,
     unlock_token: unlockToken,
     unlock_token_expires_at: unlockTokenExpiresAt.getTime()
@@ -364,10 +484,31 @@ async function handleUnlock(openid, data) {
   if (!analysis) return fail('解锁token无效或已过期');
   if (analysis._id !== analysisId) return fail('analysis_id不匹配');
 
+  // 解锁时生成完整分析结果
+  let fullResult = analysis.full_result;
+  if (!fullResult || !fullResult.optimized_text) {
+    try {
+      fullResult = await fullAnalyzeWish(
+        analysis.wish_text || '',
+        analysis.deity || '',
+        {}
+      );
+    } catch (error) {
+      console.error('生成完整分析失败:', error);
+      fullResult = {
+        optimized_text: analysis.wish_text || '',
+        structured_suggestion: {},
+        steps: ['明确目标', '设定时间', '采取行动'],
+        warnings: []
+      };
+    }
+  }
+
   await db.collection('analyses').doc(analysis._id).update({
     data: {
       unlocked: true,
-      unlock_token_used: true
+      unlock_token_used: true,
+      full_result: fullResult
     }
   });
 
@@ -380,12 +521,7 @@ async function handleUnlock(openid, data) {
 
   return ok({
     unlocked: true,
-    full_result: analysis.full_result || {
-      optimized_text: '',
-      structured_suggestion: {},
-      steps: [],
-      warnings: []
-    }
+    full_result: fullResult
   });
 }
 
