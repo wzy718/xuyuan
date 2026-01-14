@@ -18,19 +18,50 @@ export default function Index() {
     analysisId: string
   } | null>(null)
   const [pendingAnalyze, setPendingAnalyze] = useState(false)
+  const [loggingIn, setLoggingIn] = useState(false)
 
   const handleLogin = async () => {
+    if (loggingIn) return // 防止重复点击
+    
+    setLoggingIn(true)
     try {
+      console.log('开始登录流程...')
+      
+      // 获取用户信息
+      console.log('正在获取用户信息...')
       const userInfoRes = await Taro.getUserProfile({
         desc: '用于完善用户资料'
       })
-      const response = await authAPI.login(userInfoRes.userInfo)
+      console.log('用户信息获取成功:', userInfoRes.userInfo)
+      
+      // 调用登录接口（手机号授权改为可选，在云函数中处理）
+      console.log('正在调用登录接口...')
+      const response = await authAPI.login(userInfoRes.userInfo, null)
+      console.log('登录接口响应:', response)
+      
       if (response.code === 0) {
         setUser(response.data?.user || null)
         Taro.showToast({ title: '登录成功', icon: 'success' })
+        console.log('登录成功，用户信息:', response.data?.user)
+      } else {
+        console.error('登录失败，错误码:', response.code, '错误信息:', response.msg)
+        Taro.showToast({ 
+          title: response.msg || '登录失败', 
+          icon: 'none',
+          duration: 2000
+        })
       }
     } catch (error: any) {
-      Taro.showToast({ title: error.message || '登录失败', icon: 'none' })
+      console.error('登录过程出错:', error)
+      const errorMsg = error.message || error.errMsg || '登录失败，请重试'
+      console.error('错误详情:', error)
+      Taro.showToast({ 
+        title: errorMsg, 
+        icon: 'none',
+        duration: 2000
+      })
+    } finally {
+      setLoggingIn(false)
     }
   }
 
@@ -183,7 +214,12 @@ export default function Index() {
           <Text className="index-subtitle">输入愿望，我们帮你找出缺失要素与正确姿势</Text>
         </View>
         {!isLoggedIn && (
-          <Button className="bb-btn-outline" onClick={handleLogin}>
+          <Button 
+            className="bb-btn-outline" 
+            onClick={handleLogin}
+            loading={loggingIn}
+            disabled={loggingIn}
+          >
             登录
           </Button>
         )}

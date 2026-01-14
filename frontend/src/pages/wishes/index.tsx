@@ -28,19 +28,28 @@ export default function Wishes() {
     })
   }, [])
 
+  const [loggingIn, setLoggingIn] = useState(false)
+
   const handleLogin = async () => {
+    if (loggingIn) return
+    
+    setLoggingIn(true)
     try {
       const userInfoRes = await Taro.getUserProfile({
         desc: '用于完善用户资料'
       })
-      const response = await authAPI.login(userInfoRes.userInfo)
+      const response = await authAPI.login(userInfoRes.userInfo, null)
       if (response.code === 0) {
         setUser(response.data?.user || null)
         Taro.showToast({ title: '登录成功', icon: 'success' })
         loadWishes()
+      } else {
+        Taro.showToast({ title: response.msg || '登录失败', icon: 'none' })
       }
     } catch (error: any) {
       Taro.showToast({ title: error.message || '登录失败', icon: 'none' })
+    } finally {
+      setLoggingIn(false)
     }
   }
 
@@ -173,7 +182,12 @@ export default function Wishes() {
           <Text className="wishes-subtitle">记录每一份心愿，追踪实现进度</Text>
         </View>
         {!isLoggedIn && (
-          <Button className="bb-btn-outline" onClick={handleLogin}>
+          <Button 
+            className="bb-btn-outline" 
+            onClick={handleLogin}
+            loading={loggingIn}
+            disabled={loggingIn}
+          >
             登录
           </Button>
         )}

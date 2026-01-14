@@ -155,35 +155,107 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
   }
 }
 
-async function ensureUser(openid, userInfo) {
+/**
+ * 解密手机号
+ * @param {string} encryptedData - 加密数据
+ * @param {string} iv - 初始向量
+ * @param {string} sessionKey - 会话密钥
+ * @returns {string|null} 解密后的手机号
+ */
+async function decryptPhoneNumber(encryptedData, iv, sessionKey) {
+  try {
+    // 使用云函数内置的加密解密能力
+    const result = cloud.getOpenData({
+      list: [
+        {
+          cloudID: encryptedData,
+          data: {
+            phoneNumber: 'phoneNumber'
+          }
+        }
+      ]
+    });
+    
+    // 如果上述方法不可用，使用 crypto 解密
+    if (!result || !result.list || result.list.length === 0) {
+      const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(sessionKey, 'base64'), Buffer.from(iv, 'base64'));
+      let decrypted = decipher.update(encryptedData, 'base64', 'utf8');
+      decrypted += decipher.final('utf8');
+      const phoneData = JSON.parse(decrypted);
+      return phoneData.phoneNumber || null;
+    }
+    
+    return result.list[0].data?.phoneNumber || null;
+  } catch (error) {
+    console.error('解密手机号失败:', error);
+    return null;
+  }
+}
+
+async function ensureUser(openid, userInfo, phoneNumber) {
   const users = db.collection('users');
   const now = nowDate();
 
   const existing = await users.where({ _openid: openid }).limit(1).get();
   if (existing.data && existing.data.length > 0) {
     const current = existing.data[0];
+    const updateData = {
+      updated_at: now
+    };
+    
+    // 更新用户信息
     if (userInfo && (userInfo.nickName || userInfo.avatarUrl)) {
-      await users.doc(current._id).update({
-        data: {
-          nickname: userInfo.nickName || current.nickname || null,
-          avatar_url: userInfo.avatarUrl || current.avatar_url || null,
-          updated_at: now
-        }
-      });
+      updateData.nickname = userInfo.nickName || current.nickname || null;
+      updateData.avatar_url = userInfo.avatarUrl || current.avatar_url || null;
     }
-    return { id: current._id, nickname: current.nickname, avatar_url: current.avatar_url };
+    
+    // 更新手机号（如果提供了且与现有不同）
+    if (phoneNumber && phoneNumber !== current.phone) {
+      // 检查手机号是否已被其他用户使用
+      const phoneUser = await users.where({ phone: phoneNumber, _openid: _.neq(openid) }).limit(1).get();
+      if (phoneUser.data && phoneUser.data.length > 0) {
+        throw new Error('该手机号已被其他账号使用');
+      }
+      updateData.phone = phoneNumber;
+    }
+    
+    if (Object.keys(updateData).length > 1) { // 除了 updated_at 还有其他字段
+      await users.doc(current._id).update({ data: updateData });
+    }
+    
+    return { 
+      id: current._id, 
+      nickname: updateData.nickname || current.nickname, 
+      avatar_url: updateData.avatar_url || current.avatar_url,
+      phone: updateData.phone || current.phone || null
+    };
+  }
+
+  // 新用户注册
+  // 检查手机号是否已被使用
+  if (phoneNumber) {
+    const phoneUser = await users.where({ phone: phoneNumber }).limit(1).get();
+    if (phoneUser.data && phoneUser.data.length > 0) {
+      throw new Error('该手机号已被注册');
+    }
   }
 
   const addRes = await users.add({
     data: {
       nickname: userInfo?.nickName || null,
       avatar_url: userInfo?.avatarUrl || null,
+      phone: phoneNumber || null,
       created_at: now,
       updated_at: now
     }
   });
 
-  return { id: addRes._id, nickname: userInfo?.nickName || undefined, avatar_url: userInfo?.avatarUrl || undefined };
+  return { 
+    id: addRes._id, 
+    nickname: userInfo?.nickName || undefined, 
+    avatar_url: userInfo?.avatarUrl || undefined,
+    phone: phoneNumber || null
+  };
 }
 
 async function enforceHourlyLimit(openid, collectionName, maxRequests) {
@@ -196,7 +268,36 @@ async function enforceHourlyLimit(openid, collectionName, maxRequests) {
 }
 
 async function handleAuthLogin(openid, data) {
-  const user = await ensureUser(openid, data?.user_info);
+  let phoneNumber = null;
+  
+  // 解密手机号（使用 cloudID 方式）
+  if (data?.phone_cloud_id) {
+    try {
+      // 使用云函数内置能力解密手机号
+      // cloudID 是前端通过 Button open-type="getPhoneNumber" 获取的
+      // 注意：cloudID 需要是完整的 cloudID 字符串
+      const result = await cloud.getOpenData({
+        list: [{
+          cloudID: data.phone_cloud_id
+        }]
+      });
+      
+      if (result && result.list && result.list.length > 0) {
+        const phoneData = result.list[0].data;
+        phoneNumber = phoneData?.phoneNumber || null;
+        console.log('手机号解密成功:', phoneNumber ? `已获取手机号: ${phoneNumber.substring(0, 3)}****${phoneNumber.substring(7)}` : '未获取');
+      } else {
+        console.warn('手机号解密结果为空');
+      }
+    } catch (error) {
+      console.error('解密手机号失败:', error);
+      // 手机号解密失败不影响登录，继续使用其他信息
+      // 但记录错误以便排查
+      console.error('解密错误详情:', error.message || error);
+    }
+  }
+  
+  const user = await ensureUser(openid, data?.user_info, phoneNumber);
   return ok({ user });
 }
 

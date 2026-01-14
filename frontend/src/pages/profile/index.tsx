@@ -9,19 +9,28 @@ export default function Profile() {
   const { user, setUser, isLoggedIn, logout } = useAppStore()
   const [stats, setStats] = useState({ total: 0, success: 0, ongoing: 0 })
 
+  const [loggingIn, setLoggingIn] = useState(false)
+
   const handleLogin = async () => {
+    if (loggingIn) return
+    
+    setLoggingIn(true)
     try {
       const userInfoRes = await Taro.getUserProfile({
         desc: '用于完善用户资料'
       })
-      const response = await authAPI.login(userInfoRes.userInfo)
+      const response = await authAPI.login(userInfoRes.userInfo, null)
       if (response.code === 0) {
         setUser(response.data?.user || null)
         Taro.showToast({ title: '登录成功', icon: 'success' })
         loadStats()
+      } else {
+        Taro.showToast({ title: response.msg || '登录失败', icon: 'none' })
       }
     } catch (error: any) {
       Taro.showToast({ title: error.message || '登录失败', icon: 'none' })
+    } finally {
+      setLoggingIn(false)
     }
   }
 
@@ -47,7 +56,12 @@ export default function Profile() {
         <Text className="profile-name">{user?.nickname || '未登录用户'}</Text>
         <Text className="profile-id">ID: {user?.id || '—'}</Text>
         {!isLoggedIn && (
-          <Button className="bb-btn-outline profile-login" onClick={handleLogin}>
+          <Button 
+            className="bb-btn-outline profile-login" 
+            onClick={handleLogin}
+            loading={loggingIn}
+            disabled={loggingIn}
+          >
             登录
           </Button>
         )}

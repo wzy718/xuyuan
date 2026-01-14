@@ -3,7 +3,7 @@ module.exports = {
     NODE_ENV: '"production"'
   },
   defineConstants: {
-    CLOUD_ENV_ID: '"your-cloud-env-id"'
+    CLOUD_ENV_ID: '"cloud1-6g00tua33d466390"'
   },
   mini: {},
   h5: {}

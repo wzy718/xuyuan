@@ -7,10 +7,17 @@
  */
 import Taro from '@tarojs/taro'
 
+declare const CLOUD_ENV_ID: string
+
 type ApiResponse<T> = { code: number; data?: T; msg?: string }
 
 async function callFunction<T = any>(action: string, data?: any): Promise<ApiResponse<T>> {
   try {
+    // 确保云开发已初始化
+    if (!Taro.cloud) {
+      throw new Error('云开发未初始化，请检查 CLOUD_ENV_ID 配置')
+    }
+
     const res = await Taro.cloud.callFunction({
       name: 'api',
       data: { action, data }
@@ -18,13 +25,23 @@ async function callFunction<T = any>(action: string, data?: any): Promise<ApiRes
     return (res.result || { code: -1, msg: '云函数无返回' }) as ApiResponse<T>
   } catch (error: any) {
     console.error('云函数调用失败:', error)
+    // 提供更详细的错误信息
+    if (error.message && error.message.includes('env')) {
+      console.error('环境ID配置错误，请检查：')
+      console.error('1. frontend/config/dev.js 中的 CLOUD_ENV_ID 是否正确')
+      console.error('2. 云环境ID是否在微信开发者工具中正确配置')
+      console.error('3. 当前环境ID:', typeof CLOUD_ENV_ID !== 'undefined' ? CLOUD_ENV_ID : '未定义')
+    }
     throw new Error(error.message || '云函数调用失败')
   }
 }
 
 export const authAPI = {
-  async login(userInfo?: any) {
-    return callFunction<{ user: any }>('auth.login', { user_info: userInfo })
+  async login(userInfo?: any, phoneCloudID?: string) {
+    return callFunction<{ user: any }>('auth.login', { 
+      user_info: userInfo,
+      phone_cloud_id: phoneCloudID
+    })
   }
 }
 

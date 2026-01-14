@@ -104,3 +104,17 @@
 .wishes-add {
   padding-bottom: 40rpx;
 }
+
+.wishes-login-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.wishes-phone-tip {
+  font-size: 24rpx;
+  color: var(--bb-primary);
+  text-align: center;
+  margin-bottom: 12rpx;
+  display: block;
+}
