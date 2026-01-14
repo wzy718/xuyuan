@@ -322,7 +322,7 @@ export default function WishEditorModal({
             </View>
           </View>
           <View className="wish-modal__field">
-            <Text className="wish-modal__label">🎁 还愿/回向（可选）</Text>
+            <Text className="wish-modal__label">🎁 还愿（可选）</Text>
             <Input
               className="wish-modal__input"
               placeholder="例如：捐款/做公益/回向家人"
