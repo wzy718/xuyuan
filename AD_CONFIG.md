@@ -8,6 +8,29 @@
 2. **开通流量主**：需要在微信公众平台开通流量主功能
 3. **小程序类目符合要求**：确保小程序类目符合微信广告要求
 
+## ⚠️ 没有流量主资格怎么办？
+
+如果你的小程序是第一个小程序，可能暂时没有资格开通流量主。不用担心，代码已经支持**无广告模式**：
+
+### 临时解决方案
+
+1. **保持默认配置**：`ENABLE_AD_UNLOCK` 设置为 `false`（已在配置文件中默认设置）
+2. **只使用分享解锁**：用户可以通过"分享解锁"功能来解锁完整分析结果
+3. **等有资格后再启用**：当你的小程序满足流量主开通条件后，再：
+   - 开通流量主并创建广告位
+   - 将 `ENABLE_AD_UNLOCK` 改为 `true`
+   - 配置正确的广告位 ID
+   - 重新构建并发布小程序
+
+### 流量主开通条件（参考）
+
+- 小程序已发布（非开发版/体验版）
+- 小程序累计独立访客（UV）达到一定数量（具体以微信官方要求为准）
+- 小程序类目符合广告要求
+- 通过微信官方审核
+
+**注意**：流量主开通条件可能会变化，请以微信公众平台最新要求为准。
+
 ## 配置步骤
 
 ### 步骤 1：开通流量主
@@ -52,10 +75,12 @@ module.exports = {
     NODE_ENV: '"development"'
   },
   defineConstants: {
-    CLOUD_ENV_ID: '"cloud1-6g00tua33d466390"',
+    CLOUD_ENV_ID: '"cloud1-7gtd04o5108a99dd"',
     // 将下面的占位符替换为实际的广告位 ID
     BANNER_AD_UNIT_ID: '"adunit-你的横幅广告位ID"',
-    INTERSTITIAL_AD_UNIT_ID: '"adunit-你的贴片广告位ID"'
+    INTERSTITIAL_AD_UNIT_ID: '"adunit-你的贴片广告位ID"',
+    // 是否启用广告解锁功能（需要先开通流量主并配置广告位 ID）
+    ENABLE_AD_UNLOCK: 'true' // 有流量主资格时设为 true，否则设为 false
   },
   mini: {},
   h5: {}
@@ -72,10 +97,12 @@ module.exports = {
     NODE_ENV: '"production"'
   },
   defineConstants: {
-    CLOUD_ENV_ID: '"cloud1-6g00tua33d466390"',
+    CLOUD_ENV_ID: '"cloud1-7gtd04o5108a99dd"',
     // 将下面的占位符替换为实际的广告位 ID
     BANNER_AD_UNIT_ID: '"adunit-你的横幅广告位ID"',
-    INTERSTITIAL_AD_UNIT_ID: '"adunit-你的贴片广告位ID"'
+    INTERSTITIAL_AD_UNIT_ID: '"adunit-你的贴片广告位ID"',
+    // 是否启用广告解锁功能（需要先开通流量主并配置广告位 ID）
+    ENABLE_AD_UNLOCK: 'true' // 有流量主资格时设为 true，否则设为 false
   },
   mini: {},
   h5: {}

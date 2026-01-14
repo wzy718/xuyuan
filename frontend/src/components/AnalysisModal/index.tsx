@@ -7,6 +7,7 @@ import type { AnalysisResult } from '../../types'
 import './index.scss'
 
 declare const INTERSTITIAL_AD_UNIT_ID: string
+declare const ENABLE_AD_UNLOCK: string
 
 interface AnalysisModalProps {
   visible: boolean
@@ -169,10 +170,13 @@ export default function AnalysisModal({
                   <Text className="unlock-text">解锁完整优化方案</Text>
                 </View>
                 <View className="unlock-actions">
-                  <View className="unlock-btn ad-btn" onClick={onUnlockByAd}>
-                    <Text className="btn-icon">📺</Text>
-                    <Text className="btn-text">看广告解锁</Text>
-                  </View>
+                  {/* 根据配置决定是否显示广告解锁按钮 */}
+                  {typeof ENABLE_AD_UNLOCK !== 'undefined' && ENABLE_AD_UNLOCK === 'true' && (
+                    <View className="unlock-btn ad-btn" onClick={onUnlockByAd}>
+                      <Text className="btn-icon">📺</Text>
+                      <Text className="btn-text">看广告解锁</Text>
+                    </View>
+                  )}
                   <Button 
                     className="unlock-btn share-btn" 
                     openType="share" 

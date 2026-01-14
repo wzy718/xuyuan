@@ -5,6 +5,8 @@ import { wishAPI, unlockAPI, profileAPI, personAPI, categoryAPI } from '../../ut
 import type { Wish, AnalysisResult, WishProfile, Person, PersonCategory } from '../../types'
 import './index.scss'
 
+declare const ENABLE_AD_UNLOCK: string
+
 interface WishEditorModalProps {
   open: boolean
   title: string
@@ -766,9 +768,12 @@ export default function WishEditorModal({
                 <View className="wish-modal__unlock">
                   <Text className="wish-modal__analysis-title">一键 AI 优化（需解锁）</Text>
                   <View className="wish-modal__unlock-actions">
-                    <Button className="bb-btn-outline" onClick={handleUnlockByAd}>
-                      看广告解锁
-                    </Button>
+                    {/* 根据配置决定是否显示广告解锁按钮 */}
+                    {typeof ENABLE_AD_UNLOCK !== 'undefined' && ENABLE_AD_UNLOCK === 'true' && (
+                      <Button className="bb-btn-outline" onClick={handleUnlockByAd}>
+                        看广告解锁
+                      </Button>
+                    )}
                     <Button
                       className="bb-btn-outline"
                       openType="share"
