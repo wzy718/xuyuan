@@ -37,6 +37,11 @@ function ensureString(value) {
   return typeof value === 'string' ? value : '';
 }
 
+function isOwnedByOpenid(doc, openid) {
+  if (!doc || !openid) return false;
+  return doc.owner_openid === openid || doc._openid === openid;
+}
+
 function checkSensitiveWords(text) {
   const lowerText = ensureString(text).toLowerCase();
   for (const word of SENSITIVE_WORDS) {
@@ -81,8 +86,8 @@ function generateUnlockToken() {
  * 特点：prompt 简洁，响应快速
  */
 async function quickAnalyzeWish(wishText, deity = '') {
-  if (!DEEPSEEK_API_KEY) {
-    throw new Error('DeepSeek API Key未配置');
+  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
+    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
   }
 
   const systemPrompt = `你是愿望分析师。分析用户愿望是否符合标准，输出JSON格式：
@@ -94,7 +99,7 @@ async function quickAnalyzeWish(wishText, deity = '') {
 3. 方式与边界：是否包含合法合规、不伤害他人等表述
 4. 行动承诺：是否包含"我会"、"我愿意"、"每天"等行动表述
 5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
-6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号，而不是仅仅写“我”
+6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号，而不是仅仅写"我"
 
 输出要求：
 1. 如果愿望符合标准（is_qualified=true）：
@@ -113,25 +118,39 @@ async function quickAnalyzeWish(wishText, deity = '') {
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
 
-  const response = await axios.post(
-    DEEPSEEK_API_URL,
-    {
-      model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.2,
-      max_tokens: 500
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
+  let response;
+  try {
+    response = await axios.post(
+      DEEPSEEK_API_URL,
+      {
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.2,
+        max_tokens: 500
       },
-      timeout: 15000
+      {
+        headers: {
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      }
+    );
+  } catch (error) {
+    console.error('DeepSeek API 调用失败:', error.response?.status, error.response?.data, error.message);
+    if (error.response?.status === 401) {
+      throw new Error('DeepSeek API Key 无效或已过期，请检查云函数环境变量中的 DEEPSEEK_API_KEY 配置');
+    } else if (error.response?.status === 429) {
+      throw new Error('DeepSeek API 请求过于频繁，请稍后再试');
+    } else if (error.code === 'ECONNABORTED') {
+      throw new Error('DeepSeek API 请求超时，请稍后再试');
+    } else {
+      throw new Error(`DeepSeek API 调用失败: ${error.message || '未知错误'}`);
     }
-  );
+  }
 
   const content = response.data?.choices?.[0]?.message?.content || '';
 
@@ -184,8 +203,8 @@ async function quickAnalyzeWish(wishText, deity = '') {
  * 返回：优化文案、结构化建议、步骤
  */
 async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
-  if (!DEEPSEEK_API_KEY) {
-    throw new Error('DeepSeek API Key未配置');
+  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
+    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
   }
 
   const systemPrompt = `愿望优化师。输出JSON：
@@ -207,25 +226,39 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
 
-  const response = await axios.post(
-    DEEPSEEK_API_URL,
-    {
-      model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.3,
-      max_tokens: 800
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
+  let response;
+  try {
+    response = await axios.post(
+      DEEPSEEK_API_URL,
+      {
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.3,
+        max_tokens: 800
       },
-      timeout: 30000
+      {
+        headers: {
+          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+  } catch (error) {
+    console.error('DeepSeek API 调用失败:', error.response?.status, error.response?.data, error.message);
+    if (error.response?.status === 401) {
+      throw new Error('DeepSeek API Key 无效或已过期，请检查云函数环境变量中的 DEEPSEEK_API_KEY 配置');
+    } else if (error.response?.status === 429) {
+      throw new Error('DeepSeek API 请求过于频繁，请稍后再试');
+    } else if (error.code === 'ECONNABORTED') {
+      throw new Error('DeepSeek API 请求超时，请稍后再试');
+    } else {
+      throw new Error(`DeepSeek API 调用失败: ${error.message || '未知错误'}`);
     }
-  );
+  }
 
   const content = response.data?.choices?.[0]?.message?.content || '';
 
@@ -303,9 +336,17 @@ async function ensureUser(openid, userInfo, phoneNumber) {
   const users = db.collection('users');
   const now = nowDate();
 
-  const existing = await users.where({ _openid: openid }).limit(1).get();
+  // 云函数写库不保证一定自动写入 _openid，这里使用 owner_openid 作为显式归属字段
+  let existing = await users.where({ owner_openid: openid }).limit(1).get();
+  if (!existing.data || existing.data.length === 0) {
+    existing = await users.where({ _openid: openid }).limit(1).get();
+  }
   if (existing.data && existing.data.length > 0) {
     const current = existing.data[0];
+    // 兼容历史数据：若通过 _openid 找到但缺少 owner_openid，补写一次
+    if (!current.owner_openid) {
+      await users.doc(current._id).update({ data: { owner_openid: openid } }).catch(() => null);
+    }
     const updateData = {
       updated_at: now
     };
@@ -349,6 +390,7 @@ async function ensureUser(openid, userInfo, phoneNumber) {
 
   const addRes = await users.add({
     data: {
+      owner_openid: openid,
       nickname: userInfo?.nickName || null,
       avatar_url: userInfo?.avatarUrl || null,
       phone: phoneNumber || null,
@@ -367,11 +409,12 @@ async function ensureUser(openid, userInfo, phoneNumber) {
 
 async function enforceHourlyLimit(openid, collectionName, maxRequests) {
   const since = new Date(Date.now() - 60 * 60 * 1000);
-  const countRes = await db
-    .collection(collectionName)
-    .where({ _openid: openid, created_at: _.gte(since) })
-    .count();
-  return countRes.total < maxRequests;
+  const collection = db.collection(collectionName);
+  // 优先按 owner_openid 统计（新数据），若为 0 再兼容 _openid（历史数据）
+  const countByOwner = await collection.where({ owner_openid: openid, created_at: _.gte(since) }).count();
+  if (countByOwner.total > 0) return countByOwner.total < maxRequests;
+  const countByOpenid = await collection.where({ _openid: openid, created_at: _.gte(since) }).count();
+  return countByOpenid.total < maxRequests;
 }
 
 async function handleAuthLogin(openid, data) {
@@ -427,6 +470,7 @@ async function handleWishAnalyze(openid, data) {
 
   const addRes = await db.collection('analyses').add({
     data: {
+      owner_openid: openid,
       wish_id: data?.wish_id || null,
       wish_text: wishText,
       deity: deity,
@@ -458,23 +502,90 @@ async function handleWishAnalyze(openid, data) {
 }
 
 async function findAnalysisForUnlock(openid, unlockToken) {
+  // 先尝试通过 openid 和 token 查找（分享者本人）
   const res = await db
     .collection('analyses')
     .where({
-      _openid: openid,
+      owner_openid: openid,
       unlock_token: unlockToken,
       unlock_token_used: false,
       unlock_token_expires_at: _.gt(nowDate())
     })
     .limit(1)
     .get();
-  return res.data?.[0] || null;
+  
+  if (res.data && res.data.length > 0) {
+    return res.data[0];
+  }
+  
+  // 如果找不到，尝试仅通过 token 查找（被分享者，不要求 openid 匹配）
+  // 但需要验证 token 未使用且未过期
+  const resByToken = await db
+    .collection('analyses')
+    .where({
+      unlock_token: unlockToken,
+      unlock_token_used: false,
+      unlock_token_expires_at: _.gt(nowDate())
+    })
+    .limit(1)
+    .get();
+  
+  return resByToken.data?.[0] || null;
 }
 
 async function handleUnlock(openid, data) {
   const unlockToken = ensureString(data?.unlock_token);
   const analysisId = ensureString(data?.analysis_id);
   if (!unlockToken || !analysisId) return fail('缺少unlock_token或analysis_id');
+
+  // 幂等处理：同一条分析一旦解锁成功，后续重复调用（例如“查看分享页”导致的二次触发）
+  // 直接返回已解锁结果，避免因为 token 已标记 used 而报“无效或已过期”。
+  // 同时不计入解锁频控，避免用户正常流程被误伤。
+  const existingDoc = await db.collection('analyses').doc(analysisId).get().catch(() => null);
+  const existingAnalysis = existingDoc?.data || null;
+  if (isOwnedByOpenid(existingAnalysis, openid)) {
+    const tokenMatched = existingAnalysis.unlock_token === unlockToken;
+    // 仅当 token 匹配时走幂等返回，避免仅凭 analysis_id 直接取到内容
+    if (tokenMatched && (existingAnalysis.unlocked || existingAnalysis.unlock_token_used)) {
+      // 若状态异常（used=true 但 unlocked=false），顺手修正，避免后续流程反复失败
+      const shouldFixUnlocked = !existingAnalysis.unlocked;
+
+      // 若缺少 full_result，补算一次，保证前端可展示
+      let fullResult = existingAnalysis.full_result;
+      if (!fullResult || !fullResult.optimized_text) {
+        try {
+          fullResult = await fullAnalyzeWish(
+            existingAnalysis.wish_text || '',
+            existingAnalysis.deity || '',
+            {}
+          );
+        } catch (error) {
+          console.error('补算完整分析失败:', error);
+          fullResult = {
+            optimized_text: existingAnalysis.wish_text || '',
+            structured_suggestion: {},
+            steps: ['明确目标', '设定时间', '采取行动'],
+            warnings: []
+          };
+        }
+      }
+
+      if (shouldFixUnlocked || !existingAnalysis.full_result) {
+        await db.collection('analyses').doc(analysisId).update({
+          data: {
+            unlocked: true,
+            // 使用 set 强制覆盖，避免 full_result 为 null 时更新子字段报错
+            full_result: _.set(fullResult)
+          }
+        });
+      }
+
+      return ok({
+        unlocked: true,
+        full_result: fullResult
+      });
+    }
+  }
 
   // 解锁频控（简化）
   const allowed = await enforceHourlyLimit(openid, 'unlock_logs', 10);
@@ -508,7 +619,8 @@ async function handleUnlock(openid, data) {
     data: {
       unlocked: true,
       unlock_token_used: true,
-      full_result: fullResult
+      // 使用 set 强制覆盖，避免 full_result 为 null 时更新子字段报错
+      full_result: _.set(fullResult)
     }
   });
 
@@ -531,10 +643,27 @@ async function handleUnlockStatus(openid, data) {
 
   const doc = await db.collection('analyses').doc(analysisId).get().catch(() => null);
   const analysis = doc?.data || null;
-  if (!analysis || analysis._openid !== openid) return fail('分析记录不存在', -1);
+  if (!analysis || !isOwnedByOpenid(analysis, openid)) return fail('分析记录不存在', -1);
+
+  // 如果已解锁，返回完整信息（包括分析结果和完整内容）
+  if (analysis.unlocked) {
+    return ok({
+      unlocked: true,
+      unlock_token: analysis.unlock_token,
+      unlock_token_expires_at: analysis.unlock_token_expires_at
+        ? new Date(analysis.unlock_token_expires_at).getTime()
+        : null,
+      // 返回分析结果，方便前端直接显示
+      missing_elements: analysis.analysis_result?.missing_elements || [],
+      possible_reasons: analysis.analysis_result?.possible_reasons || [],
+      failure_case: analysis.analysis_result?.failure_case || '',
+      correct_posture: analysis.analysis_result?.correct_posture || '',
+      full_result: analysis.full_result || null
+    });
+  }
 
   return ok({
-    unlocked: !!analysis.unlocked,
+    unlocked: false,
     unlock_token: analysis.unlock_token,
     unlock_token_expires_at: analysis.unlock_token_expires_at
       ? new Date(analysis.unlock_token_expires_at).getTime()
@@ -552,7 +681,7 @@ async function handleWishOptimize(openid, data) {
 
   const doc = await db.collection('analyses').doc(analysisId).get().catch(() => null);
   const analysis = doc?.data || null;
-  if (!analysis || analysis._openid !== openid) return fail('分析记录不存在');
+  if (!analysis || !isOwnedByOpenid(analysis, openid)) return fail('分析记录不存在');
   if (!analysis.unlocked) return fail('未解锁，无法使用一键 AI 优化', -1);
 
   const sec = await msgSecCheck(wishText);
@@ -570,11 +699,34 @@ async function handleWishOptimize(openid, data) {
 
 async function handleTodosList(openid, data) {
   const status = data?.status;
-  const where = { _openid: openid };
-  if (status !== undefined && status !== null) where.status = Number(status);
+  const wishes = db.collection('wishes');
+  const whereBase = status !== undefined && status !== null ? { status: Number(status) } : {};
 
-  const res = await db.collection('wishes').where(where).orderBy('created_at', 'desc').get();
-  return ok(res.data || []);
+  // 优先按 owner_openid 查（新数据），为空再兼容 _openid（历史数据）
+  let res = await wishes.where({ ...whereBase, owner_openid: openid }).get();
+  if (!res.data || res.data.length === 0) {
+    res = await wishes.where({ ...whereBase, _openid: openid }).get();
+  }
+
+  const list = (res.data || []).slice().sort((a, b) => {
+    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return bt - at;
+  });
+
+  // 兼容历史数据：若列表里存在缺少 owner_openid 但 _openid 匹配的记录，补写 owner_openid
+  // 避免前端后续只按 owner_openid 查询时看不到历史数据。
+  const toBackfill = list
+    .filter((wish) => wish && !wish.owner_openid && wish._openid === openid && wish._id)
+    .slice(0, 20);
+  if (toBackfill.length > 0) {
+    await Promise.all(
+      toBackfill.map((wish) =>
+        wishes.doc(wish._id).update({ data: { owner_openid: openid } }).catch(() => null)
+      )
+    );
+  }
+  return ok(list);
 }
 
 async function handleTodosCreate(openid, data) {
@@ -586,6 +738,7 @@ async function handleTodosCreate(openid, data) {
 
   const now = nowDate();
   const wishData = {
+    owner_openid: openid,
     beneficiary_type: ensureString(data?.beneficiary_type) || null,
     beneficiary_desc: ensureString(data?.beneficiary_desc) || null,
     deity: ensureString(data?.deity) || null,
@@ -618,7 +771,7 @@ async function handleTodosUpdate(openid, data) {
 
   const doc = await db.collection('wishes').doc(wishId).get().catch(() => null);
   const wish = doc?.data || null;
-  if (!wish || wish._openid !== openid) return fail('愿望不存在');
+  if (!wish || !isOwnedByOpenid(wish, openid)) return fail('愿望不存在');
 
   const nextData = {};
   const allowedFields = [
@@ -654,7 +807,7 @@ async function handleTodosDelete(openid, data) {
 
   const doc = await db.collection('wishes').doc(wishId).get().catch(() => null);
   const wish = doc?.data || null;
-  if (!wish || wish._openid !== openid) return fail('愿望不存在');
+  if (!wish || !isOwnedByOpenid(wish, openid)) return fail('愿望不存在');
 
   await db.collection('wishes').doc(wishId).remove();
   return ok({ deleted: true });
@@ -1062,4 +1215,3 @@ exports.main = async (event, context) => {
     return fail(error.message || '服务器错误');
   }
 };
-

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, Text, Input, Textarea, Button, Picker } from '@tarojs/components'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
 import { wishAPI, unlockAPI, profileAPI, personAPI, categoryAPI } from '../../utils/api'
@@ -70,6 +70,8 @@ export default function WishEditorModal({
     unlockToken: string
     analysisId: string
   } | null>(null)
+  // openType=share 触发时 setState 可能还未生效，使用 ref 避免分享 path 丢参数
+  const shareUnlockContextRef = useRef<{ unlockToken: string; analysisId: string } | null>(null)
   const [profiles, setProfiles] = useState<WishProfile[]>([])
   const [showProfileSelector, setShowProfileSelector] = useState<'beneficiary' | 'deity' | null>(null)
   const [persons, setPersons] = useState<Person[]>([])
@@ -403,17 +405,36 @@ export default function WishEditorModal({
   }, [persons, wish.beneficiary_type])
 
   useShareAppMessage(() => {
+    // 分享后点“查看分享页”会打开这里配置的 path；为了避免回到首页后看不到要解锁的内容，
+    // 这里将解锁所需的参数带到 Tab1（愿望分析页），由页面自行处理并展示解锁结果。
+    let sharePath = '/pages/index/index'
+    const ctx = shareUnlockContextRef.current || shareUnlockContext
+    if (ctx) {
+      sharePath = `/pages/index/index?analysis_id=${ctx.analysisId}&unlock_token=${ctx.unlockToken}`
+    } else if (analysisResult?.analysis_id && analysisResult.unlock_token && !unlocked) {
+      // 兜底：避免因竞态导致分享链接不带参数
+      sharePath = `/pages/index/index?analysis_id=${analysisResult.analysis_id}&unlock_token=${analysisResult.unlock_token}`
+    }
     return {
       title: '拜拜：愿望分析助手',
-      path: '/pages/wishes/index',
+      path: sharePath,
       success: async () => {
-        if (!shareUnlockContext) return
+        const currentCtx =
+          shareUnlockContextRef.current ||
+          shareUnlockContext ||
+          (analysisResult?.analysis_id && analysisResult.unlock_token && !unlocked
+            ? { analysisId: analysisResult.analysis_id, unlockToken: analysisResult.unlock_token }
+            : null)
+        if (!currentCtx) return
+        console.log('分享成功，开始解锁...', currentCtx)
         try {
           const response = await unlockAPI.unlockByShare(
-            shareUnlockContext.unlockToken,
-            shareUnlockContext.analysisId
+            currentCtx.unlockToken,
+            currentCtx.analysisId
           )
+          console.log('解锁响应:', response)
           if (response.code === 0) {
+            // 立即更新状态，显示解锁后的内容
             setUnlocked(true)
             setAnalysisResult((prev) =>
               prev
@@ -423,15 +444,41 @@ export default function WishEditorModal({
                   }
                 : prev
             )
-            Taro.showToast({ title: '解锁成功', icon: 'success' })
+            // 延迟显示提示，避免与微信系统弹窗冲突
+            setTimeout(() => {
+              Taro.showToast({ 
+                title: '分享成功，内容已解锁', 
+                icon: 'success',
+                duration: 2000
+              })
+            }, 500)
+            // 解锁完成后清理分享上下文，避免后续继续带旧参数
+            shareUnlockContextRef.current = null
+            setShareUnlockContext(null)
           } else {
-            Taro.showToast({ title: response.msg || '解锁失败', icon: 'none' })
+            Taro.showToast({ 
+              title: response.msg || '解锁失败，请重试', 
+              icon: 'none',
+              duration: 2000
+            })
           }
         } catch (error: any) {
-          Taro.showToast({ title: error.message || '解锁失败', icon: 'none' })
+          console.error('解锁失败:', error)
+          Taro.showToast({ 
+            title: error.message || '解锁失败，请重试', 
+            icon: 'none',
+            duration: 2000
+          })
         } finally {
-          setShareUnlockContext(null)
+          // 不清除 shareUnlockContext，以便用户再次分享时仍能解锁
+          // setShareUnlockContext(null)
         }
+      },
+      fail: () => {
+        // 分享失败时清除上下文
+        console.log('分享失败，清除解锁上下文')
+        shareUnlockContextRef.current = null
+        setShareUnlockContext(null)
       }
     }
   })
@@ -487,10 +534,12 @@ export default function WishEditorModal({
 
   const handleUnlockByShare = () => {
     if (!analysisResult) return
-    setShareUnlockContext({
+    const ctx = {
       unlockToken: analysisResult.unlock_token,
       analysisId: analysisResult.analysis_id
-    })
+    }
+    shareUnlockContextRef.current = ctx
+    setShareUnlockContext(ctx)
   }
 
   const handleOptimize = async () => {

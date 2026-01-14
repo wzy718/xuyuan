@@ -120,7 +120,7 @@ npm run dev:weapp
 
 ## 部署
 
-纯云开发部署请参考 `DEPLOYMENT.md`。
+纯云开发部署请参考 `prd/docs/DEPLOYMENT.md`。
 
 ## 许可证
 

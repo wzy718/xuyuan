@@ -40,6 +40,24 @@
   box-sizing: border-box;
 }
 
+/* 页面内展示：不使用遮罩，作为结果区块插入页面 */
+.analysis-page {
+  width: 100%;
+}
+
+.analysis-page .analysis-modal {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  border-radius: 20rpx;
+  animation: none;
+}
+
+.analysis-page .analysis-content {
+  overflow: visible;
+  flex: initial;
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
