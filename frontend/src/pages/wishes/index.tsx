@@ -12,6 +12,7 @@ type FilterKey = 'all' | 'ongoing' | 'success'
 
 export default function Wishes() {
   const { setUser, isLoggedIn } = useAppStore()
+  const appStore = useAppStore()
   const [wishes, setWishes] = useState<Wish[]>([])
   const [filter, setFilter] = useState<FilterKey>('all')
   const [loading, setLoading] = useState(false)
@@ -54,7 +55,9 @@ export default function Wishes() {
   }
 
   const loadWishes = async () => {
-    if (!isLoggedIn) return
+    // 使用 store 的最新状态，而不是闭包中的状态
+    const currentIsLoggedIn = appStore.getState().isLoggedIn
+    if (!currentIsLoggedIn) return
     setLoading(true)
     try {
       const response = await todoAPI.getList()
@@ -64,7 +67,11 @@ export default function Wishes() {
           id: item._id
         }))
         setWishes(list)
+      } else {
+        console.error('加载愿望列表失败:', response.msg)
       }
+    } catch (error: any) {
+      console.error('加载愿望列表异常:', error)
     } finally {
       setLoading(false)
     }
@@ -99,6 +106,8 @@ export default function Wishes() {
         setEditingWish(null)
         setEditingWishId(null)
         await loadWishes()
+      } else {
+        Taro.showToast({ title: response.msg || '修改失败', icon: 'none' })
       }
     } else {
       const response = await todoAPI.create(payload)
@@ -107,7 +116,10 @@ export default function Wishes() {
         setShowEditor(false)
         setEditingWish(null)
         setEditingWishId(null)
+        // 强制刷新列表，确保新增的愿望能显示出来
         await loadWishes()
+      } else {
+        Taro.showToast({ title: response.msg || '记录失败', icon: 'none' })
       }
     }
   }

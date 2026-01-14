@@ -94,7 +94,7 @@ async function quickAnalyzeWish(wishText, deity = '') {
 3. 方式与边界：是否包含合法合规、不伤害他人等表述
 4. 行动承诺：是否包含"我会"、"我愿意"、"每天"等行动表述
 5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
-6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号
+6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号，而不是仅仅写“我”
 
 输出要求：
 1. 如果愿望符合标准（is_qualified=true）：
@@ -112,10 +112,6 @@ async function quickAnalyzeWish(wishText, deity = '') {
 3. 所有内容简洁有力，直击要害`;
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
-
-  // 调试：打印发送给 DeepSeek 的 prompt（注意不要在生产环境长期开启，避免日志过大）
-  console.log('quickAnalyzeWish - systemPrompt:', systemPrompt)
-  console.log('quickAnalyzeWish - userPrompt:', userPrompt)
 
   const response = await axios.post(
     DEEPSEEK_API_URL,
@@ -210,10 +206,6 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
-
-  // 调试：打印发送给 DeepSeek 的完整优化 prompt
-  console.log('fullAnalyzeWish - systemPrompt:', systemPrompt)
-  console.log('fullAnalyzeWish - userPrompt:', userPrompt)
 
   const response = await axios.post(
     DEEPSEEK_API_URL,
@@ -595,6 +587,8 @@ async function handleTodosCreate(openid, data) {
   const now = nowDate();
   const addRes = await db.collection('wishes').add({
     data: {
+      beneficiary_type: ensureString(data?.beneficiary_type) || null,
+      beneficiary_desc: ensureString(data?.beneficiary_desc) || null,
       deity: ensureString(data?.deity) || null,
       wish_text: wishText,
       time_range: ensureString(data?.time_range) || null,
@@ -623,6 +617,8 @@ async function handleTodosUpdate(openid, data) {
 
   const nextData = {};
   const allowedFields = [
+    'beneficiary_type',
+    'beneficiary_desc',
     'deity',
     'wish_text',
     'time_range',

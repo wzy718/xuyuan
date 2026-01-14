@@ -6,6 +6,8 @@ import { View, Text, ScrollView, Button } from '@tarojs/components'
 import type { AnalysisResult } from '../../types'
 import './index.scss'
 
+declare const INTERSTITIAL_AD_UNIT_ID: string
+
 interface AnalysisModalProps {
   visible: boolean
   analyzing: boolean
@@ -65,6 +67,17 @@ export default function AnalysisModal({
             </View>
             <Text className="loading-text">正在分析您的愿望...</Text>
             <Text className="loading-subtext">心诚则灵，请稍候</Text>
+            {/* 贴片广告 - 广告位 ID 在 config/dev.js 或 config/prod.js 中配置 */}
+            {typeof INTERSTITIAL_AD_UNIT_ID !== 'undefined' && INTERSTITIAL_AD_UNIT_ID !== 'adunit-xxxxxxxxxxxxxxxx' && (
+              <View className="interstitial-ad-container">
+                <ad
+                  unit-id={INTERSTITIAL_AD_UNIT_ID}
+                  type="interstitial"
+                  onLoad={() => console.log('贴片广告加载成功')}
+                  onError={(e) => console.error('贴片广告加载失败', e)}
+                />
+              </View>
+            )}
           </View>
         )}
 

@@ -7,6 +7,8 @@ import type { AnalysisResult } from '../../types'
 import AnalysisModal from '../../components/AnalysisModal'
 import './index.scss'
 
+declare const BANNER_AD_UNIT_ID: string
+
 export default function Index() {
   const { setUser, isLoggedIn } = useAppStore()
   const [wishText, setWishText] = useState('')
@@ -255,7 +257,15 @@ export default function Index() {
 
       <View className="bb-section">
         <View className="bb-card index-banner">
-          <Text className="index-banner__text">横幅广告位（微信广告组件）</Text>
+          {/* 横幅广告 - 广告位 ID 在 config/dev.js 或 config/prod.js 中配置 */}
+          {typeof BANNER_AD_UNIT_ID !== 'undefined' && BANNER_AD_UNIT_ID !== 'adunit-xxxxxxxxxxxxxxxx' && (
+            <ad
+              unit-id={BANNER_AD_UNIT_ID}
+              ad-intervals={30}
+              onLoad={() => console.log('横幅广告加载成功')}
+              onError={(e) => console.error('横幅广告加载失败', e)}
+            />
+          )}
         </View>
       </View>
 

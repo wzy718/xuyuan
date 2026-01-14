@@ -23,14 +23,13 @@
 }
 
 .index-banner {
-  text-align: center;
-  padding: 24rpx;
-  border-style: dashed;
-}
-
-.index-banner__text {
-  color: var(--bb-muted);
-  font-size: 24rpx;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200rpx;
+  padding: 0;
+  overflow: hidden;
 }
 
 .index-input {
