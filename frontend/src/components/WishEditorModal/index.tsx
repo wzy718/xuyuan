@@ -839,6 +839,16 @@ export default function WishEditorModal({
                   <Text className="wish-modal__optimize-text">
                     {analysisResult.full_result.optimized_text}
                   </Text>
+                  {analysisResult.full_result.warnings?.length > 0 && (
+                    <View className="wish-modal__warnings">
+                      <Text className="wish-modal__analysis-title">注意事项</Text>
+                      {analysisResult.full_result.warnings.map((item, index) => (
+                        <Text key={index} className="wish-modal__warnings-item">
+                          • {item}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
                   <Button
                     className="bb-btn-ghost"
                     onClick={() =>

@@ -218,6 +218,23 @@ export default function AnalysisModal({
                 </View>
               )}
 
+              {result.full_result.warnings?.length > 0 && (
+                <View className="result-section">
+                  <View className="section-header">
+                    <Text className="section-icon">🛡️</Text>
+                    <Text className="section-title">注意事项</Text>
+                  </View>
+                  <View className="section-content">
+                    {result.full_result.warnings.map((warning, index) => (
+                      <View key={index} className="list-item warning">
+                        <Text className="item-bullet">•</Text>
+                        <Text className="item-text">{warning}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               <View className="action-buttons">
                 <View className="action-btn copy-btn" onClick={onCopyText}>
                   <Text className="btn-text">复制许愿稿</Text>
