@@ -16,7 +16,8 @@ const db = cloud.database();
 const _ = db.command;
 
 // 大模型 Provider 配置（默认 deepseek，可切换 moonshot）
-const LLM_PROVIDER = (process.env.LLM_PROVIDER || 'deepseek').toLowerCase();
+// 默认 auto：若配置了 Moonshot Key 则优先使用，否则回退 DeepSeek
+const LLM_PROVIDER = (process.env.LLM_PROVIDER || 'auto').toLowerCase();
 // 是否在 analyze 回包中返回 full_result（仅用于前端缓存；展示仍需解锁，注意会降低变现强度）
 const LLM_RETURN_FULL_RESULT_IN_ANALYZE =
   (process.env.LLM_RETURN_FULL_RESULT_IN_ANALYZE || 'true').toLowerCase() === 'true';
@@ -55,19 +56,25 @@ function getLLMConfig() {
     if (!MOONSHOT_API_KEY || MOONSHOT_API_KEY.trim() === '') {
       throw new Error('Moonshot API Key未配置，请在云函数环境变量中设置 MOONSHOT_API_KEY');
     }
-    return { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+    const selected = { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
   }
 
   if (LLM_PROVIDER === 'auto') {
     if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.trim() !== '') {
-      return { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+      const selected = { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+      console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+      return selected;
     }
   }
 
   if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
     throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
   }
-  return { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
+  const selected = { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
+  console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+  return selected;
 }
 
 function extractJsonFromText(text) {
@@ -182,31 +189,23 @@ function generateUnlockToken() {
  * 特点：prompt 简洁，响应快速
  */
 async function quickAnalyzeWish(wishText, deity = '') {
-  const systemPrompt = `你是愿望分析师。分析用户愿望是否符合标准，输出JSON格式：
-{"missing":["缺失要素1","缺失要素2"],"reasons":["失败原因1","失败原因2"],"case":"类似失败案例的具体描述","posture":"正确许愿姿势的简短建议","is_qualified":true/false}
+  const systemPrompt = `你是愿望分析师。请基于用户输入，输出严格JSON（不要markdown、不要代码块、不要额外解释）：
+{"missing":["缺失要素1"],"reasons":["可能原因1"],"case":"戏剧化失败案例","posture":"正确姿势","is_qualified":true/false}
 
-评价标准（5个要素）：
-1. 时间边界：是否包含明确时间（如"3个月内"、"2026年内"等）
+评价标准（6个要素）：
+1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
 2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer等）
 3. 方式与边界：是否包含合法合规、不伤害他人等表述
-4. 行动承诺：是否包含"我会"、"我愿意"、"每天"等行动表述
+4. 行动承诺：是否包含“我会/我愿意/每天”等行动表述
 5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
-6. 明确的许愿人：是否包含明确的许愿人的名字和身份证号，而不是仅仅写"我"
+6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
 
 输出要求：
-1. 如果愿望符合标准（is_qualified=true）：
-   - missing为空数组[]或["基本要素齐全，可进一步润色"]
-   - reasons为空数组[]或["表达清晰，建议保持行动承诺并定期复盘"]
-   - case给出一个成功案例或正面案例，20-100字
-   - posture给出进一步优化建议或鼓励性建议，30字内
-   
-2. 如果愿望不符合标准（is_qualified=false）：
-   - missing列出缺失的要素，2-3条，每条15字内
-   - reasons列出失败原因，2-3条，每条15字内
-   - case给出一个真实具体的失败案例，包含：谁、许了什么愿、为什么失败、结果如何。字数20-100字
-   - posture给出具体可行的建议，30字内
-
-3. 所有内容简洁有力，直击要害`;
+1. missing：每次找出 0-6 条缺失要素（数组），每条15字内；若无缺失必须返回["基本要素齐全，可进一步润色"]
+2. reasons：每次找出 0-6 条可能原因（数组），每条15字内；若无缺失必须返回["表达清晰，建议保持行动承诺并定期复盘"]
+3. case：必须“戏剧化”，且与缺失点强相关，20-100字（如：缺方式→用意外赔偿当“暴富”；缺量化→把尾号当“上985”；缺许愿人→名字歧义导致别人应验）
+4. posture：30字内，给出最关键改法
+5. 禁止违法违规与伤害他人内容；不要编造真实身份证号码（只提示应补充）`;
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
   const content = await callChatCompletion({
@@ -346,10 +345,33 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
   }
 }
 
-要求：
-1. missing / reasons 各 2-3 条，每条 15 字内；若 is_qualified=true，可用鼓励性提示但仍返回数组
-2. full_result.steps 3-5 条；warnings 0-3 条（可以是空数组）
-3. 所有内容避免违法违规、伤害他人、诈骗赌博等`;
+评价标准（6个要素）：
+1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
+2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer等）
+3. 方式与边界：是否包含合法合规、不伤害他人等表述
+4. 行动承诺：是否包含“我会/我愿意/每天”等行动表述
+5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
+6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
+
+输出要求：
+1. missing：每次找出 0-6 条缺失要素（数组），每条 15 字内。
+   - 如果没有缺失要素，missing 必须返回：["基本要素齐全，可进一步润色"]
+2. reasons：每次找出 0-6 条“可能导致许愿失败的原因”（数组），每条 15 字内。
+   - 如果 missing 为“基本要素齐全，可进一步润色”，则 reasons 必须返回：["表达清晰，建议保持行动承诺并定期复盘"]
+3. is_qualified：
+   - 当 missing 为 ["基本要素齐全，可进一步润色"] 时，is_qualified=true
+   - 否则 is_qualified=false
+4. case：必须是“戏剧化失败案例”，要贴合用户不规范的描述，并且与 missing 中的缺失点强相关，包含“人物+许愿内容+误解/偏差+戏剧化结果”，20-100字。
+   - 缺乏方式与边界示例：小王许愿新的一年能够暴富，成功后一定回馈社会。但缺乏具体方式，结果出门被人撞骨折获得了10万元赔偿，以为“暴富”实现了。
+   - 缺少量化目标示例：小李许愿自己能上985，没有明确具体学校，结果打车来的出租车尾号985，以为“上985”应验了。
+   - 没有明确许愿人示例：小张许愿自己可以升职加薪，但许愿时使用英文名Jennifer，结果另一个Jennifer升职，自己却被裁员了。
+5. posture：30字内，给出最关键的改法（围绕 missing 的首要问题）。
+6. full_result：
+   - optimized_text：80-160字，完整、可直接复制的许愿稿，必须补齐缺失要素（时间、量化、边界、行动、还愿、许愿人信息等；还愿可选但建议加）
+   - structured_suggestion：把 6 要素拆到对应字段（缺啥补啥）
+   - steps：3-5条，可执行，避免空话
+   - warnings：0-3条（可为空数组），用于提醒合法合规与边界
+7. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要输出任何隐私泄露建议（身份证号仅作为“需要明确”的提示，不要编造真实身份证号码）`;
 
   const userPrompt = `请分析并优化以下愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
@@ -358,7 +380,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
     systemPrompt,
     userPrompt,
     temperature: 0.2,
-    maxTokens: 800,
+    maxTokens: 1000,
     timeoutMs: 15000
   });
 
@@ -380,8 +402,10 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
       isQualified && reasons.length === 0
         ? ['表达清晰，建议保持行动承诺并定期复盘']
         : reasons,
-    failure_case: ensureString(parsed.case || ''),
-    correct_posture: ensureString(parsed.posture || '')
+    failure_case:
+      ensureString(parsed.case || '') ||
+      '某用户许愿“我要暴富”，但没写时间和方式，最后只靠一次意外的小概率好运“自我安慰”，结果依旧没改变现状。',
+    correct_posture: ensureString(parsed.posture || '') || '补齐时间、量化目标、边界与行动承诺'
   };
 
   const rawFull = parsed.full_result && typeof parsed.full_result === 'object' ? parsed.full_result : {};
@@ -583,6 +607,9 @@ async function handleWishAnalyze(openid, data) {
   const allowed = await enforceHourlyLimit(openid, 'analyses', 20);
   if (!allowed) return fail('请求过于频繁，请稍后再试', -1);
 
+  // 提前确定本次请求使用的模型 Provider，便于定位“到底走了哪个模型”
+  const llmCfg = getLLMConfig();
+
   // 一次模型调用拿到“诊断 + 优化”，减少网络往返，尽量避免云函数 20s 超时
   const { quickResult, fullResult } = await combinedAnalyzeWish(wishText, deity, data?.profile || {});
 
@@ -620,7 +647,8 @@ async function handleWishAnalyze(openid, data) {
     correct_posture: quickResult.correct_posture,
     locked: true,
     unlock_token: unlockToken,
-    unlock_token_expires_at: unlockTokenExpiresAt.getTime()
+    unlock_token_expires_at: unlockTokenExpiresAt.getTime(),
+    llm: { provider: llmCfg.provider, model: llmCfg.model }
   };
   // 仅用于前端缓存（页面仍需解锁后展示）
   if (LLM_RETURN_FULL_RESULT_IN_ANALYZE && fullResult) payload.full_result = fullResult;
