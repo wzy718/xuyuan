@@ -178,6 +178,15 @@ export default function Index() {
       shareUnlockProcessedKeyRef.current = shareKey
       shareUnlockLoginPromptedKeyRef.current = null
 
+      // 优先从本地缓存恢复（用于“查看分享页”秒开：先展示缓存，后续再补齐状态）
+      const cached = readLastAnalysisCache()
+      const cachedResult =
+        cached?.analysis_result?.analysis_id === analysisId ? cached.analysis_result : null
+      const cachedWishText = cached?.wish_text || wishText
+      const cachedDeity = cached?.deity || prefillDeity
+      if (cachedWishText && !wishText) setWishText(cachedWishText)
+      if (cachedDeity && !prefillDeity) setPrefillDeity(cachedDeity)
+
       console.log('处理分享链接解锁...', { analysisId, unlockToken })
       
       // 直接尝试解锁（适用于被分享者和分享者本人）
@@ -185,67 +194,58 @@ export default function Index() {
       const response = await unlockAPI.unlockByShare(unlockToken, analysisId)
       if (response.code === 0) {
         keepProcessedKey = true
-        // 解锁成功后，再次获取完整状态（包含分析结果）
-        const statusResponse = await unlockAPI.getStatus(analysisId)
-        if (statusResponse.code === 0 && statusResponse.data) {
-          const statusData = statusResponse.data
-          // 设置分析结果并打开弹窗
-          const nextResult: AnalysisResult = {
-            analysis_id: analysisId,
-            missing_elements: statusData.missing_elements || [],
-            possible_reasons: statusData.possible_reasons || [],
-            failure_case: statusData.failure_case || '',
-            correct_posture: statusData.correct_posture || '',
-            locked: false,
-            unlock_token: unlockToken,
-            unlock_token_expires_at: statusData.unlock_token_expires_at || Date.now(),
-            full_result: response.data.full_result || statusData.full_result
-          }
-          setAnalysisResult(nextResult)
-          setUnlocked(true)
-          setShowModal(true)
-          writeLastAnalysisCache({
-            wish_text: wishText,
-            deity: prefillDeity,
-            analysis_result: nextResult,
-            unlocked: true,
-            modal_visible: true
-          })
-          Taro.showToast({ 
-            title: '解锁成功', 
-            icon: 'success',
-            duration: 1500
-          })
-        } else {
-          // 如果获取状态失败（常见于被分享者），也要尽量把 full_result 展示出来
-          const cached = readLastAnalysisCache()
-          const cachedResult =
-            cached?.analysis_result?.analysis_id === analysisId ? cached.analysis_result : null
-          const nextResult: AnalysisResult = {
-            analysis_id: analysisId,
-            missing_elements: cachedResult?.missing_elements || [],
-            possible_reasons: cachedResult?.possible_reasons || [],
-            failure_case: cachedResult?.failure_case || '',
-            correct_posture: cachedResult?.correct_posture || '',
-            locked: false,
-            unlock_token: unlockToken,
-            unlock_token_expires_at: Date.now(),
-            full_result: response.data.full_result || null
-          }
-          setAnalysisResult(nextResult)
-          setUnlocked(true)
-          setShowModal(true)
-          writeLastAnalysisCache({
-            analysis_result: nextResult,
-            unlocked: true,
-            modal_visible: true
-          })
-          Taro.showToast({ 
-            title: '解锁成功', 
-            icon: 'success',
-            duration: 1500
-          })
+        // 先用缓存直接展示（不等 getStatus），保证秒开
+        const nextResult: AnalysisResult = {
+          analysis_id: analysisId,
+          missing_elements: cachedResult?.missing_elements || [],
+          possible_reasons: cachedResult?.possible_reasons || [],
+          failure_case: cachedResult?.failure_case || '',
+          correct_posture: cachedResult?.correct_posture || '',
+          locked: false,
+          unlock_token: unlockToken,
+          unlock_token_expires_at: cachedResult?.unlock_token_expires_at || Date.now(),
+          full_result: response.data?.full_result || cachedResult?.full_result || null
         }
+        setAnalysisResult(nextResult)
+        setUnlocked(true)
+        setShowModal(true)
+        writeLastAnalysisCache({
+          wish_text: cachedWishText,
+          deity: cachedDeity,
+          analysis_result: nextResult,
+          unlocked: true,
+          modal_visible: true
+        })
+        Taro.showToast({ 
+          title: '解锁成功', 
+          icon: 'success',
+          duration: 1500
+        })
+
+        // 再异步补齐完整状态（仅分享者本人可成功拿到分析结果）
+        unlockAPI.getStatus(analysisId).then((statusResponse) => {
+          if (statusResponse.code !== 0 || !statusResponse.data) return
+          const statusData = statusResponse.data
+          const merged: AnalysisResult = {
+            ...nextResult,
+            missing_elements: statusData.missing_elements || nextResult.missing_elements,
+            possible_reasons: statusData.possible_reasons || nextResult.possible_reasons,
+            failure_case: statusData.failure_case || nextResult.failure_case,
+            correct_posture: statusData.correct_posture || nextResult.correct_posture,
+            unlock_token_expires_at: statusData.unlock_token_expires_at || nextResult.unlock_token_expires_at,
+            full_result: nextResult.full_result || statusData.full_result
+          }
+          setAnalysisResult(merged)
+          writeLastAnalysisCache({
+            wish_text: cachedWishText,
+            deity: cachedDeity,
+            analysis_result: merged,
+            unlocked: true,
+            modal_visible: true
+          })
+        }).catch(() => {
+          // 补齐失败不影响主流程（常见于被分享者）
+        })
         // 清除 storage 中的解锁参数
         Taro.removeStorageSync('bb_share_unlock')
       } else {

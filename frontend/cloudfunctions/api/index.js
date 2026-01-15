@@ -4,7 +4,7 @@
  * 说明：
  * - 使用 cloud.getWXContext() 获取 OPENID 作为用户身份，不再使用 JWT
  * - 数据使用云数据库集合：users / wishes / analyses / orders
- * - DeepSeek Key 通过云函数环境变量配置（DEEPSEEK_API_KEY）
+ * - 大模型 Key 通过云函数环境变量配置（DeepSeek / Moonshot）
  */
 const cloud = require('wx-server-sdk');
 const axios = require('axios');
@@ -15,9 +15,21 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-const DEEPSEEK_API_URL =
-  process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
+// 大模型 Provider 配置（默认 deepseek，可切换 moonshot）
+const LLM_PROVIDER = (process.env.LLM_PROVIDER || 'deepseek').toLowerCase();
+// 是否在 analyze 回包中返回 full_result（仅用于前端缓存；展示仍需解锁，注意会降低变现强度）
+const LLM_RETURN_FULL_RESULT_IN_ANALYZE =
+  (process.env.LLM_RETURN_FULL_RESULT_IN_ANALYZE || 'true').toLowerCase() === 'true';
+
+// DeepSeek（OpenAI 兼容）
+const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+
+// Moonshot（Kimi，OpenAI 兼容）
+const MOONSHOT_API_URL = process.env.MOONSHOT_API_URL || 'https://api.moonshot.cn/v1/chat/completions';
+const MOONSHOT_API_KEY = process.env.MOONSHOT_API_KEY;
+const MOONSHOT_MODEL = process.env.MOONSHOT_MODEL || 'kimi-latest';
 
 const SENSITIVE_WORDS = ['赌博', '诈骗', '杀人', '伤害', '报复', '诅咒', '违法', '犯罪'];
 
@@ -35,6 +47,90 @@ function nowDate() {
 
 function ensureString(value) {
   return typeof value === 'string' ? value : '';
+}
+
+function getLLMConfig() {
+  // 支持 auto：优先 moonshot（若配置了 key），否则 deepseek
+  if (LLM_PROVIDER === 'moonshot' || LLM_PROVIDER === 'kimi') {
+    if (!MOONSHOT_API_KEY || MOONSHOT_API_KEY.trim() === '') {
+      throw new Error('Moonshot API Key未配置，请在云函数环境变量中设置 MOONSHOT_API_KEY');
+    }
+    return { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+  }
+
+  if (LLM_PROVIDER === 'auto') {
+    if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.trim() !== '') {
+      return { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+    }
+  }
+
+  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
+    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
+  }
+  return { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
+}
+
+function extractJsonFromText(text) {
+  const content = ensureString(text);
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function callChatCompletion({
+  systemPrompt,
+  userPrompt,
+  temperature = 0.2,
+  maxTokens = 900,
+  timeoutMs = 15000,
+  model
+}) {
+  const cfg = getLLMConfig();
+  const chosenModel = ensureString(model) || cfg.model;
+
+  let response;
+  try {
+    response = await axios.post(
+      cfg.apiUrl,
+      {
+        model: chosenModel,
+        messages: [
+          { role: 'system', content: ensureString(systemPrompt) },
+          { role: 'user', content: ensureString(userPrompt) }
+        ],
+        temperature,
+        max_tokens: maxTokens
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        // 云函数默认 20s 超时，这里预留数据库读写与内容安全调用的时间
+        timeout: timeoutMs
+      }
+    );
+  } catch (error) {
+    const status = error?.response?.status;
+    const code = error?.code;
+    const providerName = cfg.provider === 'moonshot' ? 'Moonshot' : 'DeepSeek';
+    console.error(`${providerName} API 调用失败:`, status, error?.response?.data, error?.message);
+    if (status === 401) {
+      throw new Error(`${providerName} API Key 无效或已过期，请检查云函数环境变量配置`);
+    } else if (status === 429) {
+      throw new Error(`${providerName} API 请求过于频繁，请稍后再试`);
+    } else if (code === 'ECONNABORTED') {
+      throw new Error(`${providerName} API 请求超时，请稍后再试`);
+    } else {
+      throw new Error(`${providerName} API 调用失败: ${error?.message || '未知错误'}`);
+    }
+  }
+
+  return response?.data?.choices?.[0]?.message?.content || '';
 }
 
 function isOwnedByOpenid(doc, openid) {
@@ -86,10 +182,6 @@ function generateUnlockToken() {
  * 特点：prompt 简洁，响应快速
  */
 async function quickAnalyzeWish(wishText, deity = '') {
-  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
-    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
-  }
-
   const systemPrompt = `你是愿望分析师。分析用户愿望是否符合标准，输出JSON格式：
 {"missing":["缺失要素1","缺失要素2"],"reasons":["失败原因1","失败原因2"],"case":"类似失败案例的具体描述","posture":"正确许愿姿势的简短建议","is_qualified":true/false}
 
@@ -117,46 +209,16 @@ async function quickAnalyzeWish(wishText, deity = '') {
 3. 所有内容简洁有力，直击要害`;
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
-
-  let response;
-  try {
-    response = await axios.post(
-      DEEPSEEK_API_URL,
-      {
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.2,
-        max_tokens: 500
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000
-      }
-    );
-  } catch (error) {
-    console.error('DeepSeek API 调用失败:', error.response?.status, error.response?.data, error.message);
-    if (error.response?.status === 401) {
-      throw new Error('DeepSeek API Key 无效或已过期，请检查云函数环境变量中的 DEEPSEEK_API_KEY 配置');
-    } else if (error.response?.status === 429) {
-      throw new Error('DeepSeek API 请求过于频繁，请稍后再试');
-    } else if (error.code === 'ECONNABORTED') {
-      throw new Error('DeepSeek API 请求超时，请稍后再试');
-    } else {
-      throw new Error(`DeepSeek API 调用失败: ${error.message || '未知错误'}`);
-    }
-  }
-
-  const content = response.data?.choices?.[0]?.message?.content || '';
+  const content = await callChatCompletion({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.2,
+    maxTokens: 450,
+    timeoutMs: 13000
+  });
 
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
+    const parsed = extractJsonFromText(content) || JSON.parse(content);
     
     const isQualified = parsed.is_qualified === true || parsed.is_qualified === 'true';
     
@@ -202,10 +264,8 @@ async function quickAnalyzeWish(wishText, deity = '') {
  * 完整分析愿望（解锁后使用）
  * 返回：优化文案、结构化建议、步骤
  */
-async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
-  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
-    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
-  }
+async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {}) {
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 13000;
 
   const systemPrompt = `愿望优化师。输出JSON：
 {
@@ -217,55 +277,39 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}) {
     "action_commitment": "行动承诺",
     "return_wish": "还愿/回向"
   },
-  "steps": ["步骤1", "步骤2", "步骤3"]
+  "steps": ["步骤1", "步骤2", "步骤3"],
+  "warnings": ["注意事项1", "注意事项2"]
 }
-要求：简洁实用，步骤3-5条。`;
+要求：
+1. 输出简洁实用，避免空话
+2. optimized_text 80-160字
+3. steps 3-5条
+4. warnings 0-3条（可为空数组）`;
 
   const userPrompt = `优化愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
 
-  let response;
-  try {
-    response = await axios.post(
-      DEEPSEEK_API_URL,
-      {
-        model: 'deepseek-chat',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 800
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
-  } catch (error) {
-    console.error('DeepSeek API 调用失败:', error.response?.status, error.response?.data, error.message);
-    if (error.response?.status === 401) {
-      throw new Error('DeepSeek API Key 无效或已过期，请检查云函数环境变量中的 DEEPSEEK_API_KEY 配置');
-    } else if (error.response?.status === 429) {
-      throw new Error('DeepSeek API 请求过于频繁，请稍后再试');
-    } else if (error.code === 'ECONNABORTED') {
-      throw new Error('DeepSeek API 请求超时，请稍后再试');
-    } else {
-      throw new Error(`DeepSeek API 调用失败: ${error.message || '未知错误'}`);
-    }
-  }
-
-  const content = response.data?.choices?.[0]?.message?.content || '';
+  const content = await callChatCompletion({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.3,
+    maxTokens: 650,
+    timeoutMs
+  });
 
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    return JSON.parse(content);
+    const parsed = extractJsonFromText(content) || JSON.parse(content);
+    return {
+      optimized_text: ensureString(parsed?.optimized_text) || content || wishText,
+      structured_suggestion:
+        parsed?.structured_suggestion && typeof parsed.structured_suggestion === 'object'
+          ? parsed.structured_suggestion
+          : {},
+      steps: Array.isArray(parsed?.steps) ? parsed.steps : [],
+      warnings: Array.isArray(parsed?.warnings) ? parsed.warnings : []
+    };
   } catch (error) {
     return {
       optimized_text: content || wishText,
@@ -274,6 +318,84 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
       warnings: []
     };
   }
+}
+
+/**
+ * 合并分析（一次模型调用拿到“诊断 + 优化”）
+ * 目标：减少网络往返，避免云函数 20s 同步调用时限导致的超时
+ */
+async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
+  const systemPrompt = `你是“愿望分析与优化师”。请基于用户输入，输出严格 JSON（不要 markdown，不要代码块，不要额外解释），结构如下：
+{
+  "is_qualified": true,
+  "missing": ["缺失要素1","缺失要素2"],
+  "reasons": ["原因1","原因2"],
+  "case": "具体案例（20-100字）",
+  "posture": "正确姿势（30字内）",
+  "full_result": {
+    "optimized_text": "优化后的许愿稿（80-160字）",
+    "structured_suggestion": {
+      "time_range": "时间范围",
+      "target_quantify": "量化目标",
+      "way_boundary": "方式边界",
+      "action_commitment": "行动承诺",
+      "return_wish": "还愿/回向"
+    },
+    "steps": ["步骤1","步骤2","步骤3"],
+    "warnings": ["注意事项1"]
+  }
+}
+
+要求：
+1. missing / reasons 各 2-3 条，每条 15 字内；若 is_qualified=true，可用鼓励性提示但仍返回数组
+2. full_result.steps 3-5 条；warnings 0-3 条（可以是空数组）
+3. 所有内容避免违法违规、伤害他人、诈骗赌博等`;
+
+  const userPrompt = `请分析并优化以下愿望：
+${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
+
+  const content = await callChatCompletion({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.2,
+    maxTokens: 800,
+    timeoutMs: 15000
+  });
+
+  const parsed = extractJsonFromText(content);
+  if (!parsed) {
+    throw new Error('模型输出解析失败');
+  }
+
+  const isQualified = parsed.is_qualified === true || parsed.is_qualified === 'true';
+  const missing = Array.isArray(parsed.missing) ? parsed.missing : [];
+  const reasons = Array.isArray(parsed.reasons) ? parsed.reasons : [];
+
+  const quickResult = {
+    missing_elements:
+      isQualified && missing.length === 0
+        ? ['基本要素齐全，可进一步润色表达']
+        : missing,
+    possible_reasons:
+      isQualified && reasons.length === 0
+        ? ['表达清晰，建议保持行动承诺并定期复盘']
+        : reasons,
+    failure_case: ensureString(parsed.case || ''),
+    correct_posture: ensureString(parsed.posture || '')
+  };
+
+  const rawFull = parsed.full_result && typeof parsed.full_result === 'object' ? parsed.full_result : {};
+  const fullResult = {
+    optimized_text: ensureString(rawFull.optimized_text) || wishText,
+    structured_suggestion:
+      rawFull.structured_suggestion && typeof rawFull.structured_suggestion === 'object'
+        ? rawFull.structured_suggestion
+        : {},
+    steps: Array.isArray(rawFull.steps) ? rawFull.steps : [],
+    warnings: Array.isArray(rawFull.warnings) ? rawFull.warnings : []
+  };
+
+  return { quickResult, fullResult };
 }
 
 // 保留旧函数兼容性
@@ -461,8 +583,8 @@ async function handleWishAnalyze(openid, data) {
   const allowed = await enforceHourlyLimit(openid, 'analyses', 20);
   if (!allowed) return fail('请求过于频繁，请稍后再试', -1);
 
-  // 只做快速分析，返回速度更快
-  const quickResult = await quickAnalyzeWish(wishText, deity);
+  // 一次模型调用拿到“诊断 + 优化”，减少网络往返，尽量避免云函数 20s 超时
+  const { quickResult, fullResult } = await combinedAnalyzeWish(wishText, deity, data?.profile || {});
 
   const unlockToken = generateUnlockToken();
   const unlockTokenExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -480,7 +602,8 @@ async function handleWishAnalyze(openid, data) {
         failure_case: quickResult.failure_case,
         correct_posture: quickResult.correct_posture
       },
-      full_result: null, // 解锁时再生成
+      // 预生成缓存，解锁后直接读取；若为空则解锁时补算
+      full_result: fullResult,
       unlocked: false,
       unlock_token: unlockToken,
       unlock_token_expires_at: unlockTokenExpiresAt,
@@ -489,7 +612,7 @@ async function handleWishAnalyze(openid, data) {
     }
   });
 
-  return ok({
+  const payload = {
     analysis_id: addRes._id,
     missing_elements: quickResult.missing_elements,
     possible_reasons: quickResult.possible_reasons,
@@ -498,7 +621,10 @@ async function handleWishAnalyze(openid, data) {
     locked: true,
     unlock_token: unlockToken,
     unlock_token_expires_at: unlockTokenExpiresAt.getTime()
-  });
+  };
+  // 仅用于前端缓存（页面仍需解锁后展示）
+  if (LLM_RETURN_FULL_RESULT_IN_ANALYZE && fullResult) payload.full_result = fullResult;
+  return ok(payload);
 }
 
 async function findAnalysisForUnlock(openid, unlockToken) {
@@ -687,13 +813,13 @@ async function handleWishOptimize(openid, data) {
   const sec = await msgSecCheck(wishText);
   if (!sec.safe) return fail(sec.reason);
 
-  const optimizedResult = await analyzeWishByDeepSeek(wishText, deity, profile);
-
+  // 一键 AI 优化只需要完整结果，不需要再次做快速诊断（避免多次调用模型导致超时）
+  const fullResult = await fullAnalyzeWish(wishText, deity, profile);
   return ok({
-    optimized_text: optimizedResult.optimized_text || '',
-    structured_suggestion: optimizedResult.structured_suggestion || {},
-    steps: optimizedResult.steps || [],
-    warnings: optimizedResult.warnings || []
+    optimized_text: ensureString(fullResult.optimized_text) || '',
+    structured_suggestion: fullResult.structured_suggestion || {},
+    steps: fullResult.steps || [],
+    warnings: fullResult.warnings || []
   });
 }
 
