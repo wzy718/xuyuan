@@ -736,6 +736,14 @@ async function handleUnlock(openid, data) {
 
       return ok({
         unlocked: true,
+        unlock_token: unlockToken,
+        unlock_token_expires_at: existingAnalysis.unlock_token_expires_at
+          ? new Date(existingAnalysis.unlock_token_expires_at).getTime()
+          : null,
+        missing_elements: existingAnalysis.analysis_result?.missing_elements || [],
+        possible_reasons: existingAnalysis.analysis_result?.possible_reasons || [],
+        failure_case: existingAnalysis.analysis_result?.failure_case || '',
+        correct_posture: existingAnalysis.analysis_result?.correct_posture || '',
         full_result: fullResult
       });
     }
@@ -787,6 +795,14 @@ async function handleUnlock(openid, data) {
 
   return ok({
     unlocked: true,
+    unlock_token: unlockToken,
+    unlock_token_expires_at: analysis.unlock_token_expires_at
+      ? new Date(analysis.unlock_token_expires_at).getTime()
+      : null,
+    missing_elements: analysis.analysis_result?.missing_elements || [],
+    possible_reasons: analysis.analysis_result?.possible_reasons || [],
+    failure_case: analysis.analysis_result?.failure_case || '',
+    correct_posture: analysis.analysis_result?.correct_posture || '',
     full_result: fullResult
   });
 }

@@ -194,16 +194,17 @@ export default function Index() {
       const response = await unlockAPI.unlockByShare(unlockToken, analysisId)
       if (response.code === 0) {
         keepProcessedKey = true
-        // 先用缓存直接展示（不等 getStatus），保证秒开
+        // 解锁接口已返回诊断字段，直接展示（不再额外调用 unlock.status）
         const nextResult: AnalysisResult = {
           analysis_id: analysisId,
-          missing_elements: cachedResult?.missing_elements || [],
-          possible_reasons: cachedResult?.possible_reasons || [],
-          failure_case: cachedResult?.failure_case || '',
-          correct_posture: cachedResult?.correct_posture || '',
+          missing_elements: response.data?.missing_elements || cachedResult?.missing_elements || [],
+          possible_reasons: response.data?.possible_reasons || cachedResult?.possible_reasons || [],
+          failure_case: response.data?.failure_case || cachedResult?.failure_case || '',
+          correct_posture: response.data?.correct_posture || cachedResult?.correct_posture || '',
           locked: false,
           unlock_token: unlockToken,
-          unlock_token_expires_at: cachedResult?.unlock_token_expires_at || Date.now(),
+          unlock_token_expires_at:
+            response.data?.unlock_token_expires_at || cachedResult?.unlock_token_expires_at || Date.now(),
           full_result: response.data?.full_result || cachedResult?.full_result || null
         }
         setAnalysisResult(nextResult)
@@ -220,31 +221,6 @@ export default function Index() {
           title: '解锁成功', 
           icon: 'success',
           duration: 1500
-        })
-
-        // 再异步补齐完整状态（仅分享者本人可成功拿到分析结果）
-        unlockAPI.getStatus(analysisId).then((statusResponse) => {
-          if (statusResponse.code !== 0 || !statusResponse.data) return
-          const statusData = statusResponse.data
-          const merged: AnalysisResult = {
-            ...nextResult,
-            missing_elements: statusData.missing_elements || nextResult.missing_elements,
-            possible_reasons: statusData.possible_reasons || nextResult.possible_reasons,
-            failure_case: statusData.failure_case || nextResult.failure_case,
-            correct_posture: statusData.correct_posture || nextResult.correct_posture,
-            unlock_token_expires_at: statusData.unlock_token_expires_at || nextResult.unlock_token_expires_at,
-            full_result: nextResult.full_result || statusData.full_result
-          }
-          setAnalysisResult(merged)
-          writeLastAnalysisCache({
-            wish_text: cachedWishText,
-            deity: cachedDeity,
-            analysis_result: merged,
-            unlocked: true,
-            modal_visible: true
-          })
-        }).catch(() => {
-          // 补齐失败不影响主流程（常见于被分享者）
         })
         // 清除 storage 中的解锁参数
         Taro.removeStorageSync('bb_share_unlock')
