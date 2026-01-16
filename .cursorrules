@@ -4,7 +4,7 @@
 
 这是一个基于微信云开发的微信小程序项目，主要功能包括：
 - 用户认证（基于微信 OPENID）
-- 愿望分析（调用 DeepSeek API）
+- 愿望分析（调用大模型：优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 - 解锁功能（看广告/分享解锁）
 - TODO 管理（愿望列表 CRUD）
 - 支付功能（1 元许愿）
@@ -21,7 +21,7 @@
 ### 后端（云开发）
 - **云函数**: Node.js（统一入口：`frontend/cloudfunctions/api`）
 - **云数据库**: 微信云数据库（集合：`users` / `wishes` / `analyses` / `orders` / `unlock_logs`）
-- **外部服务**: DeepSeek API（AI 分析）
+- **外部服务**: 大模型 API（优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 
 ### 后端（自建，可选）
 - **框架**: Express.js

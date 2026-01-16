@@ -50,6 +50,21 @@ export default function Index() {
       if (!cache?.analysis_result?.analysis_id) return null
       if (!cache.updated_at) return null
       if (Date.now() - cache.updated_at > LAST_ANALYSIS_TTL_MS) return null
+      // 兼容历史缓存：迁移为新字段（不保留旧字段）
+      const ar: any = cache.analysis_result as any
+      const normalized: AnalysisResult = {
+        analysis_id: String(ar.analysis_id || ''),
+        analysis_results: Array.isArray(ar.analysis_results)
+          ? ar.analysis_results
+          : ([] as string[]).concat(ar.missing_elements || [], ar.possible_reasons || []),
+        case: String(ar.case || ar.failure_case || ''),
+        posture: String(ar.posture || ar.correct_posture || ''),
+        locked: Boolean(ar.locked),
+        unlock_token: String(ar.unlock_token || ''),
+        unlock_token_expires_at: Number(ar.unlock_token_expires_at) || Date.now(),
+        full_result: ar.full_result || null
+      } as any
+      cache.analysis_result = normalized
       return cache
     } catch {
       return null
@@ -197,10 +212,9 @@ export default function Index() {
         // 解锁接口已返回诊断字段，直接展示（不再额外调用 unlock.status）
         const nextResult: AnalysisResult = {
           analysis_id: analysisId,
-          missing_elements: response.data?.missing_elements || cachedResult?.missing_elements || [],
-          possible_reasons: response.data?.possible_reasons || cachedResult?.possible_reasons || [],
-          failure_case: response.data?.failure_case || cachedResult?.failure_case || '',
-          correct_posture: response.data?.correct_posture || cachedResult?.correct_posture || '',
+          analysis_results: response.data?.analysis_results || cachedResult?.analysis_results || [],
+          case: response.data?.case || cachedResult?.case || '',
+          posture: response.data?.posture || cachedResult?.posture || '',
           locked: false,
           unlock_token: unlockToken,
           unlock_token_expires_at:
@@ -239,10 +253,9 @@ export default function Index() {
               const statusData = statusResponse.data
               const nextResult: AnalysisResult = {
                 analysis_id: analysisId,
-                missing_elements: statusData.missing_elements || [],
-                possible_reasons: statusData.possible_reasons || [],
-                failure_case: statusData.failure_case || '',
-                correct_posture: statusData.correct_posture || '',
+                analysis_results: statusData.analysis_results || [],
+                case: statusData.case || '',
+                posture: statusData.posture || '',
                 locked: false,
                 unlock_token: unlockToken,
                 unlock_token_expires_at: statusData.unlock_token_expires_at || Date.now(),
@@ -391,21 +404,40 @@ export default function Index() {
             : null)
         if (!currentCtx) return
         console.log('分享成功，开始执行解锁...', currentCtx)
-        // 分享成功后执行解锁
+
+        // 秒刷新：先乐观更新 UI（若 analyze 阶段已带 full_result，可立即展示）
+        setUnlocked(true)
+        setShowModal(true)
+        setAnalysisResult((prev) => {
+          if (!prev) return prev
+          const nextResult: AnalysisResult = {
+            ...prev,
+            locked: false
+          }
+          writeLastAnalysisCache({
+            wish_text: wishText,
+            deity: prefillDeity,
+            analysis_result: nextResult,
+            unlocked: true,
+            modal_visible: true
+          })
+          return nextResult
+        })
+
+        // 分享成功后执行解锁同步（用于服务端记录/幂等）
         try {
           const response = await unlockAPI.unlockByShare(
             currentCtx.unlockToken,
             currentCtx.analysisId
           )
           if (response.code === 0) {
-            // 更新当前分析结果
-            setUnlocked(true)
             setAnalysisResult((prev) => {
               if (!prev) return prev
               const nextResult: AnalysisResult = {
                 ...prev,
                 locked: false,
-                full_result: response.data.full_result
+                full_result: response.data.full_result || prev.full_result,
+                analysis_results: response.data.analysis_results || prev.analysis_results
               }
               writeLastAnalysisCache({
                 wish_text: wishText,
@@ -430,7 +462,7 @@ export default function Index() {
             }, 500)
           } else {
             Taro.showToast({ 
-              title: response.msg || '解锁失败', 
+              title: response.msg || '解锁同步失败，请稍后再试', 
               icon: 'none',
               duration: 2000
             })
@@ -438,7 +470,7 @@ export default function Index() {
         } catch (error: any) {
           console.error('分享后解锁失败:', error)
           Taro.showToast({ 
-            title: error.message || '解锁失败', 
+            title: error.message || '解锁同步失败，请稍后再试', 
             icon: 'none',
             duration: 2000
           })

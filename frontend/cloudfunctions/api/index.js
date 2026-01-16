@@ -15,12 +15,18 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 const _ = db.command;
 
-// 大模型 Provider 配置（默认 deepseek，可切换 moonshot）
-// 默认 auto：若配置了 Moonshot Key 则优先使用，否则回退 DeepSeek
+// 大模型 Provider 配置
+// 默认 auto：优先 Qwen(通义千问) → 备选 Moonshot(Kimi) → 兜底 DeepSeek
 const LLM_PROVIDER = (process.env.LLM_PROVIDER || 'auto').toLowerCase();
 // 是否在 analyze 回包中返回 full_result（仅用于前端缓存；展示仍需解锁，注意会降低变现强度）
 const LLM_RETURN_FULL_RESULT_IN_ANALYZE =
   (process.env.LLM_RETURN_FULL_RESULT_IN_ANALYZE || 'true').toLowerCase() === 'true';
+
+// Qwen（通义千问，OpenAI 兼容模式）
+const QWEN_API_URL =
+  process.env.QWEN_API_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+const QWEN_API_KEY = process.env.QWEN_API_KEY;
+const QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-flash';
 
 // DeepSeek（OpenAI 兼容）
 const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
@@ -33,6 +39,11 @@ const MOONSHOT_API_KEY = process.env.MOONSHOT_API_KEY;
 const MOONSHOT_MODEL = process.env.MOONSHOT_MODEL || 'kimi-latest';
 
 const SENSITIVE_WORDS = ['赌博', '诈骗', '杀人', '伤害', '报复', '诅咒', '违法', '犯罪'];
+
+const QUALIFIED_ANALYSIS_RESULT = '基本要素齐全，可进一步润色表达';
+const QUALIFIED_CASE_TEXT = '表达清晰，建议保持行动承诺并定期复盘';
+// 解析失败时是否输出模型原文片段到日志（注意：可能包含用户输入的愿望文本）
+const LLM_DEBUG_LOG_ON_PARSE_FAIL = (process.env.LLM_DEBUG_LOG_ON_PARSE_FAIL || 'false').toLowerCase() === 'true';
 
 function ok(data) {
   return { code: 0, data };
@@ -50,31 +61,160 @@ function ensureString(value) {
   return typeof value === 'string' ? value : '';
 }
 
+function normalizeAnalysisResults(input) {
+  const arr = Array.isArray(input) ? input.map(ensureString).map((v) => v.trim()).filter(Boolean) : [];
+  // 去重 + 最多 6 条
+  const uniq = [];
+  for (const item of arr) {
+    if (!uniq.includes(item)) uniq.push(item);
+    if (uniq.length >= 6) break;
+  }
+  return uniq;
+}
+
 function getLLMConfig() {
-  // 支持 auto：优先 moonshot（若配置了 key），否则 deepseek
-  if (LLM_PROVIDER === 'moonshot' || LLM_PROVIDER === 'kimi') {
+  const provider = (LLM_PROVIDER || 'auto').toLowerCase();
+
+  // 强制选择：Qwen
+  if (provider === 'qwen' || provider === 'dashscope' || provider === 'aliyun') {
+    if (!QWEN_API_KEY || QWEN_API_KEY.trim() === '') {
+      throw new Error('Qwen API Key 未配置，请在云函数环境变量中设置 QWEN_API_KEY');
+    }
+    const selected = { provider: 'qwen', apiUrl: QWEN_API_URL, apiKey: QWEN_API_KEY, model: QWEN_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
+  }
+
+  // 强制选择：Moonshot/Kimi
+  if (provider === 'moonshot' || provider === 'kimi') {
     if (!MOONSHOT_API_KEY || MOONSHOT_API_KEY.trim() === '') {
-      throw new Error('Moonshot API Key未配置，请在云函数环境变量中设置 MOONSHOT_API_KEY');
+      throw new Error('Moonshot API Key 未配置，请在云函数环境变量中设置 MOONSHOT_API_KEY');
     }
     const selected = { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
     console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
     return selected;
   }
 
-  if (LLM_PROVIDER === 'auto') {
-    if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.trim() !== '') {
-      const selected = { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
-      console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
-      return selected;
+  // 强制选择：DeepSeek
+  if (provider === 'deepseek') {
+    if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
+      throw new Error('DeepSeek API Key 未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
     }
+    const selected = { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
   }
 
-  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.trim() === '') {
-    throw new Error('DeepSeek API Key未配置，请在云函数环境变量中设置 DEEPSEEK_API_KEY');
+  // 默认 auto：优先 Qwen → 备选 Kimi → 兜底 DeepSeek
+  if (QWEN_API_KEY && QWEN_API_KEY.trim() !== '') {
+    const selected = { provider: 'qwen', apiUrl: QWEN_API_URL, apiKey: QWEN_API_KEY, model: QWEN_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
   }
-  const selected = { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
-  console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
-  return selected;
+
+  if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.trim() !== '') {
+    const selected = { provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
+  }
+
+  if (DEEPSEEK_API_KEY && DEEPSEEK_API_KEY.trim() !== '') {
+    const selected = { provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL };
+    console.log('[LLM] selected:', { provider: selected.provider, model: selected.model, apiUrl: selected.apiUrl });
+    return selected;
+  }
+
+  throw new Error('未配置任何大模型 Key，请设置 QWEN_API_KEY 或 MOONSHOT_API_KEY 或 DEEPSEEK_API_KEY');
+}
+
+function getLLMConfigsInOrder() {
+  const provider = (LLM_PROVIDER || 'auto').toLowerCase();
+
+  if (provider !== 'auto') {
+    return [getLLMConfig()];
+  }
+
+  const configs = [];
+  if (QWEN_API_KEY && QWEN_API_KEY.trim() !== '') {
+    configs.push({ provider: 'qwen', apiUrl: QWEN_API_URL, apiKey: QWEN_API_KEY, model: QWEN_MODEL });
+  }
+  if (MOONSHOT_API_KEY && MOONSHOT_API_KEY.trim() !== '') {
+    configs.push({ provider: 'moonshot', apiUrl: MOONSHOT_API_URL, apiKey: MOONSHOT_API_KEY, model: MOONSHOT_MODEL });
+  }
+  if (DEEPSEEK_API_KEY && DEEPSEEK_API_KEY.trim() !== '') {
+    configs.push({ provider: 'deepseek', apiUrl: DEEPSEEK_API_URL, apiKey: DEEPSEEK_API_KEY, model: DEEPSEEK_MODEL });
+  }
+
+  if (configs.length === 0) {
+    throw new Error('未配置任何大模型 Key，请设置 QWEN_API_KEY 或 MOONSHOT_API_KEY 或 DEEPSEEK_API_KEY');
+  }
+  return configs;
+}
+
+function formatLLMErrorMessage(cfg, error) {
+  const status = error?.response?.status;
+  const code = error?.code;
+  const providerName = cfg.provider === 'qwen' ? 'Qwen' : cfg.provider === 'moonshot' ? 'Moonshot' : 'DeepSeek';
+
+  if (status === 401) {
+    return `${providerName} API Key 无效或已过期，请检查云函数环境变量配置`;
+  }
+  if (status === 429) {
+    return `${providerName} API 请求过于频繁，请稍后再试`;
+  }
+  if (code === 'ECONNABORTED') {
+    return `${providerName} API 请求超时，请稍后再试`;
+  }
+  return `${providerName} API 调用失败: ${error?.message || '未知错误'}`;
+}
+
+function getAutoAttemptTimeoutTargets(totalTimeoutMs, configs) {
+  const total = Number(totalTimeoutMs) > 0 ? Number(totalTimeoutMs) : 55000;
+  const n = Array.isArray(configs) ? configs.length : 0;
+  if (n <= 1) return [total];
+
+  // 支持通过环境变量精细控制 auto 模式下各 provider 的超时分配（单位 ms）
+  const envQwen = Number(process.env.LLM_AUTO_QWEN_TIMEOUT_MS);
+  const envMoonshot = Number(process.env.LLM_AUTO_MOONSHOT_TIMEOUT_MS);
+  const envDeepseek = Number(process.env.LLM_AUTO_DEEPSEEK_TIMEOUT_MS);
+
+  const wants = configs.map((cfg) => {
+    if (cfg.provider === 'qwen' && envQwen > 0) return envQwen;
+    if (cfg.provider === 'moonshot' && envMoonshot > 0) return envMoonshot;
+    if (cfg.provider === 'deepseek' && envDeepseek > 0) return envDeepseek;
+    return null;
+  });
+
+  // 默认分配：优先给 Qwen 更长时间，其次 Kimi；DeepSeek 作为兜底尽量用剩余
+  // 3 个 provider：40s / 20s / 剩余
+  // 2 个 provider：40s / 20s（若总预算不足会在运行时自动缩短）
+  const defaults =
+    n === 3
+      ? {
+          qwen: 40000,
+          moonshot: 20000,
+          deepseek: Math.max(3000, total - 40000 - 20000)
+        }
+      : {
+          qwen: 40000,
+          moonshot: 20000,
+          deepseek: 20000
+        };
+
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const cfg = configs[i];
+    const wanted = wants[i];
+    const def =
+      cfg.provider === 'qwen'
+        ? defaults.qwen
+        : cfg.provider === 'moonshot'
+          ? defaults.moonshot
+          : defaults.deepseek;
+
+    out.push(Number(wanted) > 0 ? Number(wanted) : def);
+  }
+  return out;
 }
 
 function extractJsonFromText(text) {
@@ -88,56 +228,117 @@ function extractJsonFromText(text) {
   }
 }
 
+function safeLogLLMParseFail(context, llm, content) {
+  if (!LLM_DEBUG_LOG_ON_PARSE_FAIL) return;
+  const text = ensureString(content);
+  const head = text.slice(0, 500);
+  const tail = text.length > 500 ? text.slice(-200) : '';
+  const hash = crypto.createHash('sha256').update(text).digest('hex');
+  console.error('[LLM] parse fail:', {
+    context,
+    llm: llm || null,
+    length: text.length,
+    head,
+    tail,
+    sha256: hash
+  });
+}
+
 async function callChatCompletion({
   systemPrompt,
   userPrompt,
   temperature = 0.2,
   maxTokens = 900,
-  timeoutMs = 15000,
+  // 你已将云函数超时设置为 60s，这里预留部分时间给数据库/内容安全等逻辑
+  timeoutMs = 55000,
   model
 }) {
-  const cfg = getLLMConfig();
-  const chosenModel = ensureString(model) || cfg.model;
+  const configs = getLLMConfigsInOrder();
+  const isAuto = (LLM_PROVIDER || 'auto').toLowerCase() === 'auto';
+  const totalTimeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : 15000;
+  const attemptTimeoutTargets = isAuto ? getAutoAttemptTimeoutTargets(totalTimeoutMs, configs) : [totalTimeoutMs];
+  const startedAt = Date.now();
+  const safetyMs = 1500;
+  const minRemainingToAttemptMs = 3000;
+  let lastErr = null;
+  let lastCfg = null;
 
-  let response;
-  try {
-    response = await axios.post(
-      cfg.apiUrl,
-      {
-        model: chosenModel,
-        messages: [
-          { role: 'system', content: ensureString(systemPrompt) },
-          { role: 'user', content: ensureString(userPrompt) }
-        ],
-        temperature,
-        max_tokens: maxTokens
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${cfg.apiKey}`,
-          'Content-Type': 'application/json'
+  for (let i = 0; i < configs.length; i++) {
+    const cfg = configs[i];
+    const chosenModel = ensureString(model) || cfg.model;
+    const elapsedMs = Date.now() - startedAt;
+    const remainingTotalMs = totalTimeoutMs - elapsedMs - safetyMs;
+    if (remainingTotalMs <= 0) break;
+
+    // auto 模式下若剩余总预算不足以发起一次有效请求，则停止继续尝试，避免“最后兜底模型”误报超时
+    if (isAuto && remainingTotalMs < minRemainingToAttemptMs) {
+      console.warn('[LLM] stop trying next provider due to insufficient remaining time:', {
+        remainingTotalMs,
+        minRemainingToAttemptMs,
+        lastProvider: lastCfg?.provider || null
+      });
+      break;
+    }
+
+    const target = Number(attemptTimeoutTargets[i]) > 0 ? Number(attemptTimeoutTargets[i]) : remainingTotalMs;
+    // 确保不超过整体预算剩余时间；这样能保证“40s + 20s”在 60s 云函数内尽量安全落地
+    const perAttemptTimeoutMs = Math.max(1000, Math.min(target, remainingTotalMs));
+
+    console.log(isAuto ? '[LLM] attempt:' : '[LLM] selected:', {
+      provider: cfg.provider,
+      model: chosenModel,
+      apiUrl: cfg.apiUrl,
+      timeoutMs: perAttemptTimeoutMs
+    });
+
+    try {
+      const response = await axios.post(
+        cfg.apiUrl,
+        {
+          model: chosenModel,
+          messages: [
+            { role: 'system', content: ensureString(systemPrompt) },
+            { role: 'user', content: ensureString(userPrompt) }
+          ],
+          temperature,
+          max_tokens: maxTokens
         },
-        // 云函数默认 20s 超时，这里预留数据库读写与内容安全调用的时间
-        timeout: timeoutMs
+        {
+          headers: {
+            Authorization: `Bearer ${cfg.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          // 云函数默认 20s 超时，这里预留数据库读写与内容安全调用的时间
+          timeout: perAttemptTimeoutMs
+        }
+      );
+
+      return {
+        content: response?.data?.choices?.[0]?.message?.content || '',
+        llm: { provider: cfg.provider, model: chosenModel }
+      };
+    } catch (error) {
+      lastErr = error;
+      lastCfg = cfg;
+      const msg = formatLLMErrorMessage(cfg, error);
+      const providerName = cfg.provider === 'qwen' ? 'Qwen' : cfg.provider === 'moonshot' ? 'Moonshot' : 'DeepSeek';
+      console.error(`${providerName} API 调用失败:`, error?.response?.status, error?.response?.data, error?.message);
+
+      if (!isAuto) {
+        throw new Error(msg);
       }
-    );
-  } catch (error) {
-    const status = error?.response?.status;
-    const code = error?.code;
-    const providerName = cfg.provider === 'moonshot' ? 'Moonshot' : 'DeepSeek';
-    console.error(`${providerName} API 调用失败:`, status, error?.response?.data, error?.message);
-    if (status === 401) {
-      throw new Error(`${providerName} API Key 无效或已过期，请检查云函数环境变量配置`);
-    } else if (status === 429) {
-      throw new Error(`${providerName} API 请求过于频繁，请稍后再试`);
-    } else if (code === 'ECONNABORTED') {
-      throw new Error(`${providerName} API 请求超时，请稍后再试`);
-    } else {
-      throw new Error(`${providerName} API 调用失败: ${error?.message || '未知错误'}`);
+      if (i < configs.length - 1) {
+        console.warn('[LLM] fallback to next provider due to error:', msg);
+        continue;
+      }
+      throw new Error(msg);
     }
   }
 
-  return response?.data?.choices?.[0]?.message?.content || '';
+  if (lastCfg) {
+    throw new Error(formatLLMErrorMessage(lastCfg, lastErr));
+  }
+  throw new Error('模型调用失败：剩余时间不足或无可用模型');
 }
 
 function isOwnedByOpenid(doc, openid) {
@@ -185,12 +386,12 @@ function generateUnlockToken() {
 
 /**
  * 快速分析愿望（用于首页弹窗展示）
- * 返回：缺失要素、失败原因、失败案例、正确姿势
+ * 返回：analysis_results、case、posture
  * 特点：prompt 简洁，响应快速
  */
 async function quickAnalyzeWish(wishText, deity = '') {
-  const systemPrompt = `你是愿望分析师。请基于用户输入，输出严格JSON（不要markdown、不要代码块、不要额外解释）：
-{"missing":["缺失要素1"],"reasons":["可能原因1"],"case":"戏剧化失败案例","posture":"正确姿势","is_qualified":true/false}
+  const systemPrompt = `你是愿望分析师。请基于用户输入，输出严格 JSON（不要 markdown、不要代码块、不要额外解释）：
+{"analysis_results":["原因和后果1"],"case":"戏剧化失败案例或正向建议","posture":"关键改法"}
 
 评价标准（6个要素）：
 1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
@@ -201,60 +402,46 @@ async function quickAnalyzeWish(wishText, deity = '') {
 6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
 
 输出要求：
-1. missing：每次找出 0-6 条缺失要素（数组），每条15字内；若无缺失必须返回["基本要素齐全，可进一步润色"]
-2. reasons：每次找出 0-6 条可能原因（数组），每条15字内；若无缺失必须返回["表达清晰，建议保持行动承诺并定期复盘"]
-3. case：必须“戏剧化”，且与缺失点强相关，20-100字（如：缺方式→用意外赔偿当“暴富”；缺量化→把尾号当“上985”；缺许愿人→名字歧义导致别人应验）
-4. posture：30字内，给出最关键改法
-5. 禁止违法违规与伤害他人内容；不要编造真实身份证号码（只提示应补充）`;
+1. analysis_results：输出 0-6 条“可能导致许愿失败的原因和后果”（数组），每条 18 字内。
+   - 必须逐条对照上面 6 条评价标准：每缺 1 条标准，最多输出 1 条原因和后果（要点名对应标准），最多 6 条。
+   - 若 6 条标准均满足，则返回：["${QUALIFIED_ANALYSIS_RESULT}"]。
+2. case：
+   - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
+   - 否则 case 必须是“戏剧化失败案例”，要贴合用户不规范的描述，并与 analysis_results 强相关，20-100 字。
+3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
+4. 禁止违法违规、伤害他人、诈骗赌博等；不要编造任何身份证号码（仅使用“使用占位符”提示）。`;
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
-  const content = await callChatCompletion({
+  const llmRes = await callChatCompletion({
     systemPrompt,
     userPrompt,
     temperature: 0.2,
     maxTokens: 450,
     timeoutMs: 13000
   });
+  const content = llmRes?.content || '';
 
   try {
     const parsed = extractJsonFromText(content) || JSON.parse(content);
-    
-    const isQualified = parsed.is_qualified === true || parsed.is_qualified === 'true';
-    
-    // 如果符合标准，使用正面反馈
-    if (isQualified) {
-      const result = {
-        missing_elements: parsed.missing && parsed.missing.length > 0 
-          ? parsed.missing 
-          : ['基本要素齐全，可进一步润色表达'],
-        possible_reasons: parsed.reasons && parsed.reasons.length > 0
-          ? parsed.reasons
-          : ['表达清晰，建议保持行动承诺并定期复盘'],
-        failure_case: parsed.case || '某用户许愿"希望在3个月内找到月薪8000元以上的前端开发工作，我会每天投递5份简历并学习新技术，成功后我会还愿并捐款100元"。因为目标明确、时间清晰、行动具体，最终在2个月内成功入职心仪公司。',
-        correct_posture: parsed.posture || '您的愿望表达已经很规范，建议继续保持并定期复盘进度，必要时可调整时间或目标'
-      };
-      
-      console.log('quickAnalyzeWish - qualified result:', JSON.stringify(result, null, 2));
-      return result;
-    }
-    
-    // 如果不符合标准，使用问题分析
+    const analysisResults = normalizeAnalysisResults(parsed?.analysis_results);
+    const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
+    const caseText = ensureString(parsed?.case || '').trim() || (isQualified ? QUALIFIED_CASE_TEXT : '');
+    const posture = ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间与量化目标');
+
     const result = {
-      missing_elements: parsed.missing || [],
-      possible_reasons: parsed.reasons || [],
-      failure_case: parsed.case || '某用户许愿"希望找到好工作"，但未明确具体岗位、薪资范围和时间期限。半年后仍未找到满意工作，因为目标模糊导致求职方向不明确，投递简历时缺乏针对性，最终只能接受一份并不理想的工作。',
-      correct_posture: parsed.posture || '明确目标、设定时间、承诺行动、许下还愿'
+      analysis_results: analysisResults.length > 0 ? analysisResults : [QUALIFIED_ANALYSIS_RESULT],
+      case: caseText || '小王许愿“想暴富”，没写时间和方式，结果中了张5元刮刮乐还以为“显灵”，转头继续躺平，年底还是月光。',
+      posture
     };
-    
-    console.log('quickAnalyzeWish - unqualified result:', JSON.stringify(result, null, 2));
+
+    console.log('quickAnalyzeWish - result:', JSON.stringify(result, null, 2));
     return result;
   } catch (error) {
     console.error('quickAnalyzeWish - parse error:', error, 'content:', content);
     return {
-      missing_elements: ['愿望表述不够清晰', '缺少具体目标'],
-      possible_reasons: ['缺少时间限制', '没有量化标准'],
-      failure_case: '某用户许愿"希望找到好工作"，但未明确具体岗位、薪资范围和时间期限。半年后仍未找到满意工作，因为目标模糊导致求职方向不明确，投递简历时缺乏针对性，最终只能接受一份并不理想的工作。',
-      correct_posture: '明确目标金额、设定实现时间、承诺具体行动、许下还愿方式'
+      analysis_results: ['缺时间边界，易拖延', '缺量化目标，易自嗨'],
+      case: '小李许愿“要上985”，没说哪所也没写分数，结果打车来辆尾号985，激动到忘了复习，期末照旧。',
+      posture: '先补齐时间+量化目标'
     };
   }
 }
@@ -264,7 +451,7 @@ async function quickAnalyzeWish(wishText, deity = '') {
  * 返回：优化文案、结构化建议、步骤
  */
 async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {}) {
-  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 13000;
+  const timeoutMs = Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : 45000;
 
   const systemPrompt = `愿望优化师。输出JSON：
 {
@@ -274,7 +461,8 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {})
     "target_quantify": "量化目标",
     "way_boundary": "方式边界",
     "action_commitment": "行动承诺",
-    "return_wish": "还愿/回向"
+    "return_wish": "还愿/回向",
+    "wisher_info": "许愿人信息"
   },
   "steps": ["步骤1", "步骤2", "步骤3"],
   "warnings": ["注意事项1", "注意事项2"]
@@ -283,20 +471,23 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {})
 1. 输出简洁实用，避免空话
 2. optimized_text 80-160字
 3. steps 3-5条
-4. warnings 0-3条（可为空数组）`;
+4. warnings 0-3条（可为空数组）
+5. 必须包含“许愿人：姓名（身份证号：使用占位符）”，不要编造任何身份证号码
+6. 所有内容避免违法违规、伤害他人、诈骗赌博等，并包含“合法合规、不伤害他人”等边界表述`;
 
   const userPrompt = `优化愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
 
-  const content = await callChatCompletion({
+  const llmRes = await callChatCompletion({
     systemPrompt,
     userPrompt,
     temperature: 0.3,
     maxTokens: 650,
     timeoutMs
   });
+  const content = llmRes?.content || '';
 
   try {
     const parsed = extractJsonFromText(content) || JSON.parse(content);
@@ -324,21 +515,20 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
  * 目标：减少网络往返，避免云函数 20s 同步调用时限导致的超时
  */
 async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
-  const systemPrompt = `你是“愿望分析与优化师”。请基于用户输入，输出严格 JSON（不要 markdown，不要代码块，不要额外解释），结构如下：
+  const systemPrompt = `你是“愿望分析与优化师”。请基于用户输入，输出严格 JSON（不要 markdown，不要代码块、不要额外解释），结构如下：
 {
-  "is_qualified": true,
-  "missing": ["缺失要素1","缺失要素2"],
-  "reasons": ["原因1","原因2"],
-  "case": "具体案例（20-100字）",
-  "posture": "正确姿势（30字内）",
+  "analysis_results": ["原因和后果1","原因和后果2"],
+  "case": "戏剧化失败案例或正向建议",
+  "posture": "关键改法（30字内）",
   "full_result": {
     "optimized_text": "优化后的许愿稿（80-160字）",
     "structured_suggestion": {
-      "time_range": "时间范围",
+      "time_range": "时间边界",
       "target_quantify": "量化目标",
-      "way_boundary": "方式边界",
+      "way_boundary": "方式与边界",
       "action_commitment": "行动承诺",
-      "return_wish": "还愿/回向"
+      "return_wish": "还愿/回向（可选但建议）",
+      "wisher_info": "许愿人信息（姓名+身份证号占位符）"
     },
     "steps": ["步骤1","步骤2","步骤3"],
     "warnings": ["注意事项1"]
@@ -354,58 +544,47 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
 6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
 
 输出要求：
-1. missing：每次找出 0-6 条缺失要素（数组），每条 15 字内。
-   - 如果没有缺失要素，missing 必须返回：["基本要素齐全，可进一步润色"]
-2. reasons：每次找出 0-6 条“可能导致许愿失败的原因”（数组），每条 15 字内。
-   - 如果 missing 为“基本要素齐全，可进一步润色”，则 reasons 必须返回：["表达清晰，建议保持行动承诺并定期复盘"]
-3. is_qualified：
-   - 当 missing 为 ["基本要素齐全，可进一步润色"] 时，is_qualified=true
-   - 否则 is_qualified=false
-4. case：必须是“戏剧化失败案例”，要贴合用户不规范的描述，并且与 missing 中的缺失点强相关，包含“人物+许愿内容+误解/偏差+戏剧化结果”，20-100字。
-   - 缺乏方式与边界示例：小王许愿新的一年能够暴富，成功后一定回馈社会。但缺乏具体方式，结果出门被人撞骨折获得了10万元赔偿，以为“暴富”实现了。
-   - 缺少量化目标示例：小李许愿自己能上985，没有明确具体学校，结果打车来的出租车尾号985，以为“上985”应验了。
-   - 没有明确许愿人示例：小张许愿自己可以升职加薪，但许愿时使用英文名Jennifer，结果另一个Jennifer升职，自己却被裁员了。
-5. posture：30字内，给出最关键的改法（围绕 missing 的首要问题）。
-6. full_result：
+1. analysis_results：输出 0-6 条“可能导致许愿失败的原因和后果”（数组），每条 18 字内。
+   - 必须逐条对照上面 6 条评价标准：每缺 1 条标准，最多输出 1 条原因和后果（要点名对应标准），最多 6 条。
+   - 若 6 条标准均满足，则返回：["${QUALIFIED_ANALYSIS_RESULT}"]。
+2. case：
+   - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
+   - 否则 case 必须是“戏剧化失败案例，有梗有趣有传播性”，要贴合用户不规范的描述，并且与 analysis_results 强相关，包含“人物+许愿内容+误解/偏差+戏剧化结果”，20-100字。
+3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
+4. full_result：
    - optimized_text：80-160字，完整、可直接复制的许愿稿，必须补齐缺失要素（时间、量化、边界、行动、还愿、许愿人信息等；还愿可选但建议加）
    - structured_suggestion：把 6 要素拆到对应字段（缺啥补啥）
    - steps：3-5条，可执行，避免空话
    - warnings：0-3条（可为空数组），用于提醒合法合规与边界
-7. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要输出任何隐私泄露建议（身份证号仅作为“需要明确”的提示，不要编造真实身份证号码）`;
+5. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要编造任何身份证号码（仅使用占位符提示，如：许愿人：张三（身份证号：使用占位符））。`;
 
   const userPrompt = `请分析并优化以下愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
 
-  const content = await callChatCompletion({
+  const llmRes = await callChatCompletion({
     systemPrompt,
     userPrompt,
     temperature: 0.2,
     maxTokens: 1000,
-    timeoutMs: 15000
+    timeoutMs: 60000
   });
+  const content = llmRes?.content || '';
 
   const parsed = extractJsonFromText(content);
   if (!parsed) {
+    safeLogLLMParseFail('combinedAnalyzeWish', llmRes?.llm, content);
     throw new Error('模型输出解析失败');
   }
 
-  const isQualified = parsed.is_qualified === true || parsed.is_qualified === 'true';
-  const missing = Array.isArray(parsed.missing) ? parsed.missing : [];
-  const reasons = Array.isArray(parsed.reasons) ? parsed.reasons : [];
+  const analysisResults = normalizeAnalysisResults(parsed?.analysis_results);
+  const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
 
   const quickResult = {
-    missing_elements:
-      isQualified && missing.length === 0
-        ? ['基本要素齐全，可进一步润色表达']
-        : missing,
-    possible_reasons:
-      isQualified && reasons.length === 0
-        ? ['表达清晰，建议保持行动承诺并定期复盘']
-        : reasons,
-    failure_case:
-      ensureString(parsed.case || '') ||
-      '某用户许愿“我要暴富”，但没写时间和方式，最后只靠一次意外的小概率好运“自我安慰”，结果依旧没改变现状。',
-    correct_posture: ensureString(parsed.posture || '') || '补齐时间、量化目标、边界与行动承诺'
+    analysis_results: analysisResults.length > 0 ? analysisResults : [QUALIFIED_ANALYSIS_RESULT],
+    case:
+      ensureString(parsed?.case || '').trim() ||
+      (isQualified ? QUALIFIED_CASE_TEXT : '小王许愿“要暴富”，没写时间与方式，结果拿到一笔误打款还以为显灵，追回后瞬间破防。'),
+    posture: ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间边界与量化目标')
   };
 
   const rawFull = parsed.full_result && typeof parsed.full_result === 'object' ? parsed.full_result : {};
@@ -419,7 +598,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
     warnings: Array.isArray(rawFull.warnings) ? rawFull.warnings : []
   };
 
-  return { quickResult, fullResult };
+  return { quickResult, fullResult, llm: llmRes?.llm || null };
 }
 
 // 保留旧函数兼容性
@@ -430,10 +609,9 @@ async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
   const fullResult = await fullAnalyzeWish(wishText, deity, profile);
   
   return {
-    missing_elements: quickResult.missing_elements,
-    possible_reasons: quickResult.possible_reasons,
-    failure_case: quickResult.failure_case,
-    correct_posture: quickResult.correct_posture,
+    analysis_results: quickResult.analysis_results,
+    case: quickResult.case,
+    posture: quickResult.posture,
     optimized_text: fullResult.optimized_text,
     structured_suggestion: fullResult.structured_suggestion,
     steps: fullResult.steps,
@@ -607,11 +785,8 @@ async function handleWishAnalyze(openid, data) {
   const allowed = await enforceHourlyLimit(openid, 'analyses', 20);
   if (!allowed) return fail('请求过于频繁，请稍后再试', -1);
 
-  // 提前确定本次请求使用的模型 Provider，便于定位“到底走了哪个模型”
-  const llmCfg = getLLMConfig();
-
   // 一次模型调用拿到“诊断 + 优化”，减少网络往返，尽量避免云函数 20s 超时
-  const { quickResult, fullResult } = await combinedAnalyzeWish(wishText, deity, data?.profile || {});
+  const { quickResult, fullResult, llm } = await combinedAnalyzeWish(wishText, deity, data?.profile || {});
 
   const unlockToken = generateUnlockToken();
   const unlockTokenExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
@@ -624,10 +799,9 @@ async function handleWishAnalyze(openid, data) {
       wish_text: wishText,
       deity: deity,
       analysis_result: {
-        missing_elements: quickResult.missing_elements,
-        possible_reasons: quickResult.possible_reasons,
-        failure_case: quickResult.failure_case,
-        correct_posture: quickResult.correct_posture
+        analysis_results: quickResult.analysis_results,
+        case: quickResult.case,
+        posture: quickResult.posture
       },
       // 预生成缓存，解锁后直接读取；若为空则解锁时补算
       full_result: fullResult,
@@ -641,14 +815,13 @@ async function handleWishAnalyze(openid, data) {
 
   const payload = {
     analysis_id: addRes._id,
-    missing_elements: quickResult.missing_elements,
-    possible_reasons: quickResult.possible_reasons,
-    failure_case: quickResult.failure_case,
-    correct_posture: quickResult.correct_posture,
+    analysis_results: quickResult.analysis_results,
+    case: quickResult.case,
+    posture: quickResult.posture,
     locked: true,
     unlock_token: unlockToken,
     unlock_token_expires_at: unlockTokenExpiresAt.getTime(),
-    llm: { provider: llmCfg.provider, model: llmCfg.model }
+    llm: llm || null
   };
   // 仅用于前端缓存（页面仍需解锁后展示）
   if (LLM_RETURN_FULL_RESULT_IN_ANALYZE && fullResult) payload.full_result = fullResult;
@@ -740,10 +913,9 @@ async function handleUnlock(openid, data) {
         unlock_token_expires_at: existingAnalysis.unlock_token_expires_at
           ? new Date(existingAnalysis.unlock_token_expires_at).getTime()
           : null,
-        missing_elements: existingAnalysis.analysis_result?.missing_elements || [],
-        possible_reasons: existingAnalysis.analysis_result?.possible_reasons || [],
-        failure_case: existingAnalysis.analysis_result?.failure_case || '',
-        correct_posture: existingAnalysis.analysis_result?.correct_posture || '',
+        analysis_results: existingAnalysis.analysis_result?.analysis_results || [],
+        case: existingAnalysis.analysis_result?.case || '',
+        posture: existingAnalysis.analysis_result?.posture || '',
         full_result: fullResult
       });
     }
@@ -799,10 +971,9 @@ async function handleUnlock(openid, data) {
     unlock_token_expires_at: analysis.unlock_token_expires_at
       ? new Date(analysis.unlock_token_expires_at).getTime()
       : null,
-    missing_elements: analysis.analysis_result?.missing_elements || [],
-    possible_reasons: analysis.analysis_result?.possible_reasons || [],
-    failure_case: analysis.analysis_result?.failure_case || '',
-    correct_posture: analysis.analysis_result?.correct_posture || '',
+    analysis_results: analysis.analysis_result?.analysis_results || [],
+    case: analysis.analysis_result?.case || '',
+    posture: analysis.analysis_result?.posture || '',
     full_result: fullResult
   });
 }
@@ -824,10 +995,9 @@ async function handleUnlockStatus(openid, data) {
         ? new Date(analysis.unlock_token_expires_at).getTime()
         : null,
       // 返回分析结果，方便前端直接显示
-      missing_elements: analysis.analysis_result?.missing_elements || [],
-      possible_reasons: analysis.analysis_result?.possible_reasons || [],
-      failure_case: analysis.analysis_result?.failure_case || '',
-      correct_posture: analysis.analysis_result?.correct_posture || '',
+      analysis_results: analysis.analysis_result?.analysis_results || [],
+      case: analysis.analysis_result?.case || '',
+      posture: analysis.analysis_result?.posture || '',
       full_result: analysis.full_result || null
     });
   }

@@ -427,6 +427,18 @@ export default function WishEditorModal({
             : null)
         if (!currentCtx) return
         console.log('分享成功，开始解锁...', currentCtx)
+
+        // 秒刷新：先乐观更新 UI（若 analyze 阶段已带 full_result，可立即展示）
+        setUnlocked(true)
+        setAnalysisResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                locked: false
+              }
+            : prev
+        )
+
         try {
           const response = await unlockAPI.unlockByShare(
             currentCtx.unlockToken,
@@ -435,12 +447,13 @@ export default function WishEditorModal({
           console.log('解锁响应:', response)
           if (response.code === 0) {
             // 立即更新状态，显示解锁后的内容
-            setUnlocked(true)
             setAnalysisResult((prev) =>
               prev
                 ? {
                     ...prev,
-                    full_result: response.data.full_result
+                    locked: false,
+                    full_result: response.data.full_result || prev.full_result,
+                    analysis_results: response.data.analysis_results || prev.analysis_results
                   }
                 : prev
             )
@@ -457,7 +470,7 @@ export default function WishEditorModal({
             setShareUnlockContext(null)
           } else {
             Taro.showToast({ 
-              title: response.msg || '解锁失败，请重试', 
+              title: response.msg || '解锁同步失败，请稍后再试', 
               icon: 'none',
               duration: 2000
             })
@@ -465,7 +478,7 @@ export default function WishEditorModal({
         } catch (error: any) {
           console.error('解锁失败:', error)
           Taro.showToast({ 
-            title: error.message || '解锁失败，请重试', 
+            title: error.message || '解锁同步失败，请稍后再试', 
             icon: 'none',
             duration: 2000
           })
@@ -797,20 +810,18 @@ export default function WishEditorModal({
               <Text className="bb-card-title">诊断结果</Text>
               <View className="wish-modal__analysis-row">
                 <View className="wish-modal__analysis-card">
-                  <Text className="wish-modal__analysis-title">缺失要素</Text>
-                  {analysisResult.missing_elements?.map((item, index) => (
+                  <Text className="wish-modal__analysis-title">分析结果</Text>
+                  {(analysisResult.analysis_results || []).map((item, index) => (
                     <Text key={index} className="wish-modal__analysis-item">
                       • {item}
                     </Text>
                   ))}
                 </View>
                 <View className="wish-modal__analysis-card">
-                  <Text className="wish-modal__analysis-title">潜在原因</Text>
-                  {analysisResult.possible_reasons?.map((item, index) => (
-                    <Text key={index} className="wish-modal__analysis-item">
-                      • {item}
-                    </Text>
-                  ))}
+                  <Text className="wish-modal__analysis-title">建议</Text>
+                  <Text className="wish-modal__analysis-item">
+                    • {analysisResult.posture || '先补齐时间边界与量化目标'}
+                  </Text>
                 </View>
               </View>
               {!unlocked && (

@@ -10,6 +10,8 @@ module.exports = {
     // 是否启用广告解锁功能（需要先开通流量主并配置广告位 ID）
     ENABLE_AD_UNLOCK: 'false' // 设置为 true 启用，false 禁用（无流量主资格时设为 false）
   },
-  mini: {},
+  mini: {
+    debugReact: true
+  },
   h5: {}
 }

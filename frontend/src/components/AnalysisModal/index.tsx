@@ -1,6 +1,6 @@
 /**
  * 分析结果弹窗组件
- * 显示愿望分析结果：缺失要素、失败原因、失败案例、正确姿势
+ * 显示愿望分析结果：分析结果、失败案例、正确姿势
  */
 import { View, Text, Button } from '@tarojs/components'
 import type { AnalysisResult } from '../../types'
@@ -8,6 +8,8 @@ import './index.scss'
 
 declare const INTERSTITIAL_AD_UNIT_ID: string
 declare const ENABLE_AD_UNLOCK: string
+
+const QUALIFIED_ANALYSIS_RESULT = '基本要素齐全，可进一步润色表达'
 
 interface AnalysisModalProps {
   visible: boolean
@@ -42,10 +44,9 @@ export default function AnalysisModal({
     console.log('AnalysisModal - result:', JSON.stringify(result, null, 2))
   }
 
-  // 如果缺失要素为空或仅包含“基本要素齐全”之类的提示，认为整体表达已达标
-  const isQualified = !result?.missing_elements ||
-    result.missing_elements.length === 0 ||
-    result.missing_elements.every((item) => item.indexOf('基本要素齐全') !== -1)
+  const analysisResults = result?.analysis_results || []
+  const isQualified =
+    analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT
 
   const Content = (
     <View className="analysis-modal" onClick={(e) => e.stopPropagation()}>
@@ -95,47 +96,25 @@ export default function AnalysisModal({
             </View>
           </View>
 
-          {/* 缺失要素 */}
+          {/* 分析结果 */}
           <View className="result-section">
             <View className="section-header">
               <Text className="section-icon">⚠️</Text>
-              <Text className="section-title">缺失要素</Text>
+              <Text className="section-title">分析结果</Text>
             </View>
             <View className="section-content">
-              {result.missing_elements?.length > 0 ? (
-                result.missing_elements.map((item, index) => (
+              {analysisResults?.length > 0 ? (
+                analysisResults.map((item, index) => (
                   <View key={index} className="list-item missing">
                     <Text className="item-bullet">•</Text>
                     <Text className="item-text">{item}</Text>
                   </View>
                 ))
               ) : (
-                <Text className="empty-text">暂无缺失要素</Text>
+                <Text className="empty-text">基本要素齐全，可进一步润色</Text>
               )}
             </View>
           </View>
-
-          {/* 可能失败的原因（仅在不达标时展示） */}
-          {!isQualified && (
-            <View className="result-section">
-              <View className="section-header">
-                <Text className="section-icon">💭</Text>
-                <Text className="section-title">可能导致许愿失败的原因</Text>
-              </View>
-              <View className="section-content">
-                {result.possible_reasons?.length > 0 ? (
-                  result.possible_reasons.map((item, index) => (
-                    <View key={index} className="list-item reason">
-                      <Text className="item-bullet">•</Text>
-                      <Text className="item-text">{item}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <Text className="empty-text">暂无分析结果</Text>
-                )}
-              </View>
-            </View>
-          )}
 
           {/* 类似失败案例（仅在不达标时展示） */}
           {!isQualified && (
@@ -145,9 +124,7 @@ export default function AnalysisModal({
                 <Text className="section-title">类似失败案例</Text>
               </View>
               <View className="section-content case-box">
-                <Text className="case-text">
-                  {result.failure_case || '许愿时缺少明确目标和时间，导致难以实现'}
-                </Text>
+                <Text className="case-text">{result.case || '许愿时缺少关键要素，容易被误解'}</Text>
               </View>
             </View>
           )}
@@ -159,9 +136,7 @@ export default function AnalysisModal({
               <Text className="section-title">正确姿势</Text>
             </View>
             <View className="section-content posture-box">
-              <Text className="posture-text">
-                {result.correct_posture || '明确目标、设定时间、承诺行动、许下还愿'}
-              </Text>
+              <Text className="posture-text">{result.posture || '先补齐时间边界与量化目标'}</Text>
             </View>
           </View>
 

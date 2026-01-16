@@ -202,6 +202,17 @@ REFRESH_TOKEN_EXPIRE=7d
 
 DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
+DEEPSEEK_MODEL=deepseek-chat
+
+# 大模型（推荐按 GLM→Kimi→DeepSeek 配置）
+LLM_PROVIDER=auto
+ZHIPU_API_KEY=your_zhipu_api_key
+ZHIPU_API_URL=https://open.bigmodel.cn/api/paas/v4/chat/completions
+ZHIPU_MODEL=glm-4.5-flash
+
+MOONSHOT_API_KEY=your_moonshot_api_key
+MOONSHOT_API_URL=https://api.moonshot.cn/v1/chat/completions
+MOONSHOT_MODEL=kimi-latest
 
 WECHAT_PAY_MCHID=your_mchid
 WECHAT_PAY_KEY=your_pay_key

@@ -24,7 +24,7 @@ backend/
 │   │   └── payment.js     # 支付路由
 │   ├── services/          # 服务层
 │   │   ├── wechat.js     # 微信服务
-│   │   └── deepseek.js   # DeepSeek服务
+│   │   └── deepseek.js   # 大模型服务（自动降级：GLM→Kimi→DeepSeek）
 │   └── utils/            # 工具函数
 │       └── token.js      # Token工具
 ├── scripts/

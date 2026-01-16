@@ -87,7 +87,7 @@
 **函数**：`quickAnalyzeWish(wishText, deity = '')`
 
 **处理逻辑**：
-1. 调用 DeepSeek API 分析愿望
+1. 调用大模型分析愿望（云函数默认 `auto`：优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 2. 解析返回的 JSON，检查 `is_qualified` 字段
 3. 根据 `is_qualified` 的值返回不同的结果：
    - `true`：返回正面反馈和成功案例

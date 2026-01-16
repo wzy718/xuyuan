@@ -32,7 +32,7 @@ xuyuan/
 - 云数据库（集合：`users` / `wishes` / `analyses` / `orders` / `unlock_logs`）
 
 ### 外部服务
-- DeepSeek API（AI 分析与优化，仅在云函数中调用）
+- 大模型 API（AI 分析与优化，仅在云函数中调用；优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 
 ## 快速开始
 
@@ -59,11 +59,13 @@ npm run dev:weapp
 4. 在开发者工具中创建云环境，并将环境 ID 填入 `frontend/config/dev.js` 与 `frontend/config/prod.js` 的 `CLOUD_ENV_ID`。
 5. 右键云函数 `cloudfunctions/api`，上传并部署（安装依赖）。
 
-### 3. DeepSeek API 配置（云函数环境变量）
+### 3. 大模型配置（云函数环境变量）
 
 在云开发控制台为云函数配置环境变量：
-- `DEEPSEEK_API_KEY`
-- （可选）`DEEPSEEK_API_URL`
+- （推荐）`ZHIPU_API_KEY`（优先 GLM-4.5-Flash；按 BigModel 文档直接作为 Bearer Key 使用；同时兼容旧式 `id.secret` 形态）
+- （可选）`MOONSHOT_API_KEY`（Kimi 备选）
+- （可选）`DEEPSEEK_API_KEY`（最后兜底）
+- （可选）`LLM_PROVIDER=auto|glm|zhipu|kimi|moonshot|deepseek`（不配置默认 `auto`，按 GLM→Kimi→DeepSeek 依次尝试）
 
 ## 说明
 - 纯云开发版不需要配置服务器域名（云函数调用走云开发通道），也不需要自建 MySQL/Redis。
@@ -76,7 +78,7 @@ npm run dev:weapp
 - 前端获取用户资料，云函数写入/更新用户信息
 
 ### 2. 愿望分析
-- 调用DeepSeek API分析愿望
+- 调用大模型分析愿望（优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 - 识别缺失要素和潜在原因
 - 提供优化建议
 
@@ -106,14 +108,14 @@ npm run dev:weapp
 
 ## 安全措施
 
-1. **API Key保护**：DeepSeek API Key 仅在云函数中使用，禁止出现在前端
+1. **API Key保护**：大模型 API Key 仅在云函数中使用，禁止出现在前端
 2. **内容安全**：云函数侧进行文本安全审核（含敏感词兜底）
 3. **限流保护**：云函数侧按用户维度做简化频控（基于云数据库记录）
 4. **解锁风控**：解锁 token 一次性 + 过期时间 + 频控
 
 ## 开发注意事项
 
-1. **环境变量**：DeepSeek Key 通过云函数环境变量配置，禁止提交到仓库
+1. **环境变量**：大模型 Key 通过云函数环境变量配置，禁止提交到仓库
 2. **数据库权限**：建议默认仅云函数可写，客户端只读或受限读
 3. **微信支付**：正式接入需配置商户号并实现回调幂等更新订单状态
 4. **内容安全**：建议开通并启用云开发内容安全能力

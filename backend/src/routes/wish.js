@@ -24,7 +24,7 @@ router.post(
       const { wish_text, deity, profile } = req.body;
       const userId = req.user.id;
 
-      // 调用DeepSeek分析
+      // 调用大模型分析（服务端自动降级：GLM→Kimi→DeepSeek）
       const analysisResult = await analyzeWish(wish_text, deity, profile || {});
 
       // 提取缺失要素和潜在原因（基础结果）
@@ -114,7 +114,7 @@ router.post(
         });
       }
 
-      // 调用DeepSeek优化
+      // 调用大模型优化（服务端自动降级：GLM→Kimi→DeepSeek）
       const optimizedResult = await analyzeWish(wish_text, deity, profile || {});
 
       res.json({

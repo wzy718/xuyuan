@@ -29,10 +29,12 @@ export interface Wish {
 
 export interface AnalysisResult {
   analysis_id: string
-  missing_elements: string[]
-  possible_reasons: string[]
-  failure_case?: string // 类似失败案例
-  correct_posture?: string // 正确姿势
+  // 分析结果：按 6 条评价标准逐条对照，输出 0-6 条“可能导致失败的原因”
+  analysis_results: string[]
+  // 戏剧化失败案例（达标时为正向建议）
+  case: string
+  // 最关键的改法
+  posture: string
   locked: boolean
   unlock_token: string
   unlock_token_expires_at: number
@@ -44,6 +46,7 @@ export interface AnalysisResult {
       way_boundary?: string
       action_commitment?: string
       return_wish?: string
+      wisher_info?: string
     }
     steps: string[]
     warnings: string[]

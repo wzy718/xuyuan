@@ -192,7 +192,7 @@
 - 操作响应时间 < 1秒
 
 ### 3.2 安全要求
-- API Key 保护：DeepSeek API Key 必须通过云函数环境变量配置
+- API Key 保护：大模型 API Key 必须通过云函数环境变量配置（优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 - 内容安全：必须调用微信内容安全 API
 - 限流保护：用户级别限流（每天最多 N 次）
 - 解锁风控：设备指纹 + 行为序列 + 频控 + 黑名单
@@ -346,7 +346,7 @@
 ### 8.2 后端（云开发）
 - **云函数**：Node.js（统一入口：`cloudfunctions/api`）
 - **云数据库**：微信云数据库
-- **外部服务**：DeepSeek API
+- **外部服务**：大模型 API（优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 
 ---
 
@@ -354,7 +354,7 @@
 
 ### Phase 1：核心功能（MVP）
 1. ✅ 用户登录（微信授权）
-2. ✅ 愿望分析接口（调用 DeepSeek）
+2. ✅ 愿望分析接口（调用大模型：优先 GLM-4.5-Flash，备选 Kimi，最后 DeepSeek）
 3. ✅ TODO 列表 CRUD
 4. ✅ 基础内容安全过滤
 
