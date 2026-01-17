@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, Input, Textarea, Button, Picker } from '@tarojs/components'
+import { View, Text, Input, Textarea, Button } from '@tarojs/components'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
 import { wishAPI, unlockAPI, profileAPI, personAPI, categoryAPI } from '../../utils/api'
 import type { Wish, AnalysisResult, WishProfile, Person, PersonCategory } from '../../types'
@@ -86,6 +86,18 @@ export default function WishEditorModal({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showPersonSelector, setShowPersonSelector] = useState(false)
 
+  const beneficiaryOptions =
+    categories.length > 0
+      ? categories.map((c) => ({ value: c.value, label: c.label, icon: c.icon || '' }))
+      : BENEFICIARY_OPTIONS
+
+  const getBeneficiaryLabel = (beneficiaryType?: string) => {
+    if (!beneficiaryType) return ''
+    const fromCategories = categories.find((c) => c.value === beneficiaryType)?.label
+    if (fromCategories) return fromCategories
+    return BENEFICIARY_OPTIONS.find((opt) => opt.value === beneficiaryType)?.label || beneficiaryType
+  }
+
   useEffect(() => {
     if (open) {
       setWish({ ...emptyWish, ...initialWish })
@@ -124,7 +136,7 @@ export default function WishEditorModal({
       // 填充许愿人/受益人相关字段
       setWish((prev) => ({
         ...prev,
-        beneficiary_type: profile.beneficiary_type as any,
+        beneficiary_type: profile.beneficiary_type,
         beneficiary_desc: profile.beneficiary_desc || ''
       }))
     }
@@ -183,11 +195,17 @@ export default function WishEditorModal({
     }
   }
 
-  const handleOpenPersonManager = () => {
+  const handleOpenPersonManager = (preferredCategory?: string | null) => {
+    const initialCategory =
+      preferredCategory !== undefined
+        ? preferredCategory
+        : wish.beneficiary_type && wish.beneficiary_type !== 'self'
+          ? wish.beneficiary_type
+          : null
     setShowPersonManager(true)
     setEditingPerson(null)
-    setPersonForm({ name: '', category: '', id_card: '', phone: '' })
-    setSelectedCategory(null)
+    setPersonForm({ name: '', category: initialCategory || '', id_card: '', phone: '' })
+    setSelectedCategory(initialCategory)
     loadCategories()
   }
 
@@ -199,7 +217,15 @@ export default function WishEditorModal({
       id_card: person.id_card || '',
       phone: person.phone || ''
     })
+    setSelectedCategory(person.category || null)
     setShowPersonManager(true)
+    loadCategories()
+  }
+
+  const handleSelectPersonCategory = (categoryValue: string | null) => {
+    // 顶部分类既用于筛选列表，也作为“新增/编辑人员”的分类归属
+    setSelectedCategory(categoryValue)
+    setPersonForm((prev) => ({ ...prev, category: categoryValue || '' }))
   }
 
   const handleSavePerson = async () => {
@@ -207,17 +233,18 @@ export default function WishEditorModal({
       Taro.showToast({ title: '姓名不能为空', icon: 'none' })
       return
     }
+    const categoryValue = selectedCategory || ''
     try {
       const response = editingPerson
         ? await personAPI.update(editingPerson.id, {
             name: personForm.name.trim(),
-            category: personForm.category.trim() || undefined,
+            category: categoryValue || undefined,
             id_card: personForm.id_card.trim() || undefined,
             phone: personForm.phone.trim() || undefined
           })
         : await personAPI.create({
             name: personForm.name.trim(),
-            category: personForm.category.trim() || undefined,
+            category: categoryValue || undefined,
             id_card: personForm.id_card.trim() || undefined,
             phone: personForm.phone.trim() || undefined
           })
@@ -348,7 +375,7 @@ export default function WishEditorModal({
     setShowPersonSelector(false)
   }
 
-  const handleSelectBeneficiaryType = (type: 'self' | 'family' | 'child' | 'couple' | 'other') => {
+  const handleSelectBeneficiaryType = (type: string) => {
     setWish((prev) => {
       const newWish = { ...prev, beneficiary_type: type }
       
@@ -375,20 +402,9 @@ export default function WishEditorModal({
     if (!wish.beneficiary_type || wish.beneficiary_type === 'self') {
       return []
     }
-    
-    // 将 beneficiary_type 映射到 category
-    const categoryMap: Record<string, string> = {
-      'family': 'family',
-      'child': 'child',
-      'couple': 'couple',
-      'other': 'other'
-    }
-    
-    const targetCategory = categoryMap[wish.beneficiary_type]
-    if (!targetCategory) return []
-    
-    // 筛选对应分类的人员
-    return persons.filter((p) => p.category === targetCategory)
+
+    // beneficiary_type 与人员 category 使用同一套分类 value（默认 + 自定义）
+    return persons.filter((p) => p.category === wish.beneficiary_type)
   }
 
   // 当人员列表更新时，如果当前选择的分类有人员，自动选择第一个（可选）
@@ -670,13 +686,13 @@ export default function WishEditorModal({
             </View>
             <Text className="wish-modal__hint">这个愿望是为谁许的？</Text>
             <View className="wish-modal__beneficiary-options">
-              {BENEFICIARY_OPTIONS.map((option) => (
+              {beneficiaryOptions.map((option) => (
                 <View
                   key={option.value}
                   className={`wish-modal__beneficiary-option ${
                     wish.beneficiary_type === option.value ? 'is-active' : ''
                   }`}
-                  onClick={() => handleSelectBeneficiaryType(option.value as any)}
+                  onClick={() => handleSelectBeneficiaryType(option.value)}
                 >
                   <Text className="wish-modal__beneficiary-icon">{option.icon}</Text>
                   <Text className="wish-modal__beneficiary-label">{option.label}</Text>
@@ -895,9 +911,7 @@ export default function WishEditorModal({
                   <Text className="wish-modal__profile-empty">暂无历史记录</Text>
                 ) : (
                   profiles.map((profile) => {
-                    const beneficiaryLabel =
-                      BENEFICIARY_OPTIONS.find((opt) => opt.value === profile.beneficiary_type)?.label ||
-                      profile.beneficiary_type
+                    const beneficiaryLabel = getBeneficiaryLabel(profile.beneficiary_type)
                     const displayText =
                       showProfileSelector === 'beneficiary'
                         ? `${beneficiaryLabel}${profile.beneficiary_desc ? ` - ${profile.beneficiary_desc}` : ''}`
@@ -911,8 +925,7 @@ export default function WishEditorModal({
                         <Text className="wish-modal__profile-text">{displayText}</Text>
                         {showProfileSelector === 'deity' && profile.beneficiary_desc && (
                           <Text className="wish-modal__profile-desc">
-                            {BENEFICIARY_OPTIONS.find((opt) => opt.value === profile.beneficiary_type)?.label ||
-                              profile.beneficiary_type}
+                            {getBeneficiaryLabel(profile.beneficiary_type)}
                             {profile.beneficiary_desc ? ` - ${profile.beneficiary_desc}` : ''}
                           </Text>
                         )}
@@ -956,7 +969,7 @@ export default function WishEditorModal({
               {/* 分类管理 */}
               <View className="wish-modal__field">
                 <View className="wish-modal__field-header">
-                  <Text className="wish-modal__label">分类管理</Text>
+                  <Text className="wish-modal__label">分类</Text>
                   <Text
                     className="wish-modal__manage-btn"
                     onClick={() => {
@@ -966,13 +979,13 @@ export default function WishEditorModal({
                       loadCategories()
                     }}
                   >
-                    管理分类
+                    分类管理
                   </Text>
                 </View>
                 <View className="wish-modal__category-options">
                   <View
                     className={`wish-modal__category-option ${selectedCategory === null ? 'is-active' : ''}`}
-                    onClick={() => setSelectedCategory(null)}
+                    onClick={() => handleSelectPersonCategory(null)}
                   >
                     <Text className="wish-modal__category-label">全部</Text>
                   </View>
@@ -982,7 +995,7 @@ export default function WishEditorModal({
                       className={`wish-modal__category-option ${
                         selectedCategory === category.value ? 'is-active' : ''
                       }`}
-                      onClick={() => setSelectedCategory(category.value)}
+                      onClick={() => handleSelectPersonCategory(category.value)}
                     >
                       {category.icon && (
                         <Text className="wish-modal__category-icon">{category.icon}</Text>
@@ -1005,41 +1018,6 @@ export default function WishEditorModal({
                   value={personForm.name}
                   onInput={(e) => setPersonForm((prev) => ({ ...prev, name: e.detail.value }))}
                 />
-              </View>
-              <View className="wish-modal__field">
-                <Text className="wish-modal__label">分类（可选）</Text>
-                <Picker
-                  mode="selector"
-                  range={categories}
-                  rangeKey="label"
-                  value={categories.findIndex((c) => c.value === personForm.category)}
-                  onChange={(e) => {
-                    const index = e.detail.value as number
-                    if (index >= 0 && index < categories.length) {
-                      setPersonForm((prev) => ({ ...prev, category: categories[index].value }))
-                    }
-                  }}
-                >
-                  <View className="wish-modal__picker">
-                    {personForm.category ? (
-                      <View className="wish-modal__picker-selected">
-                        {(() => {
-                          const selected = categories.find((c) => c.value === personForm.category)
-                          return (
-                            <>
-                              {selected?.icon && (
-                                <Text className="wish-modal__category-icon">{selected.icon}</Text>
-                              )}
-                              <Text className="wish-modal__category-label">{selected?.label || '请选择分类'}</Text>
-                            </>
-                          )
-                        })()}
-                      </View>
-                    ) : (
-                      <Text className="wish-modal__picker-placeholder">请选择分类</Text>
-                    )}
-                  </View>
-                </Picker>
               </View>
               <View className="wish-modal__field">
                 <Text className="wish-modal__label">身份证号（可选）</Text>
@@ -1272,7 +1250,9 @@ export default function WishEditorModal({
                   className={`wish-modal__emoji-item ${
                     categoryForm.icon === emoji ? 'is-selected' : ''
                   }`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // 选择图标后关闭弹窗，避免遮挡后续输入
                     setCategoryForm((prev) => ({ ...prev, icon: emoji }))
                     setShowEmojiPicker(false)
                   }}
@@ -1299,7 +1279,7 @@ export default function WishEditorModal({
           >
             <View className="wish-modal__person-selector-header">
               <Text className="wish-modal__person-selector-title">
-                选择{BENEFICIARY_OPTIONS.find((opt) => opt.value === wish.beneficiary_type)?.label || ''}
+                选择{getBeneficiaryLabel(wish.beneficiary_type)}
               </Text>
               <Text
                 className="wish-modal__person-selector-close"

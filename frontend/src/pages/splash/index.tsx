@@ -5,8 +5,23 @@ import './index.scss'
 
 export default function Splash() {
   const [seconds, setSeconds] = useState(5)
+  const [skipButtonStyle, setSkipButtonStyle] = useState<React.CSSProperties>({})
 
   useEffect(() => {
+    // 获取小程序胶囊按钮位置，设置关闭按钮位置
+    const menuButtonInfo = Taro.getMenuButtonBoundingClientRect()
+    const systemInfo = Taro.getSystemInfoSync()
+    if (menuButtonInfo && systemInfo) {
+      // 关闭按钮位于胶囊按钮下方，间距 8rpx
+      const top = menuButtonInfo.bottom + 8
+      // 关闭按钮右边界与胶囊按钮右边界对齐
+      const right = systemInfo.windowWidth - menuButtonInfo.right
+      setSkipButtonStyle({
+        top: `${top}px`,
+        right: `${right}px`
+      })
+    }
+
     const timer = setInterval(() => {
       setSeconds((prev) => {
         if (prev <= 1) {
@@ -35,7 +50,7 @@ export default function Splash() {
         <Text className="splash-title">开屏广告位</Text>
         <Text className="splash-subtitle">微信广告组件</Text>
       </View>
-      <Button className="splash-skip" onClick={handleExit}>
+      <Button className="splash-skip" style={skipButtonStyle} onClick={handleExit}>
         跳过 {seconds}s
       </Button>
     </View>

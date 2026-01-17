@@ -484,9 +484,6 @@
 .wish-modal__icon-display {
   font-size: 36rpx;
   line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* 默认图标（浅灰色线框图） */
@@ -547,7 +544,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 4000;
+  /* 需要盖住“分类管理/人员管理”等二级弹窗（.wish-modal z-index: 9999），否则会出现点了选图标但看不到列表的情况 */
+  z-index: 10000;
   padding: 24rpx;
 }
 

@@ -12,7 +12,7 @@ export interface User {
 export interface Wish {
   id: string
   // 许愿人/受益人
-  beneficiary_type?: 'self' | 'family' | 'child' | 'couple' | 'other'
+  beneficiary_type?: string // 分类值（默认 + 自定义）
   beneficiary_desc?: string // 具体说明，如"爸爸妈妈"、"我和老公"、"全家人"
   // 对象（向谁许愿）
   deity?: string
@@ -68,7 +68,7 @@ export interface Order {
 
 export interface WishProfile {
   id: string
-  beneficiary_type: 'self' | 'family' | 'child' | 'couple' | 'other'
+  beneficiary_type: string // 分类值（默认 + 自定义）
   beneficiary_desc?: string
   deity: string
   created_at?: string

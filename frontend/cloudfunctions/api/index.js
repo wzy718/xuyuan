@@ -1225,7 +1225,7 @@ async function handlePaymentCreate(openid, data) {
 async function handleProfileList(openid, data) {
   const res = await db
     .collection('wish_profiles')
-    .where({ _openid: openid })
+    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
     .orderBy('updated_at', 'desc')
     .get();
   return ok(res.data || []);
@@ -1264,6 +1264,7 @@ async function handleProfileCreate(openid, data) {
   // 创建新记录
   const addRes = await db.collection('wish_profiles').add({
     data: {
+      owner_openid: openid,
       beneficiary_type: beneficiaryType,
       beneficiary_desc: beneficiaryDesc,
       deity: deity,
@@ -1273,7 +1274,7 @@ async function handleProfileCreate(openid, data) {
   });
 
   const doc = await db.collection('wish_profiles').doc(addRes._id).get();
-  return ok(doc.data);
+  return ok({ ...doc.data, id: addRes._id });
 }
 
 async function handleProfileDelete(openid, data) {
@@ -1282,7 +1283,7 @@ async function handleProfileDelete(openid, data) {
 
   const doc = await db.collection('wish_profiles').doc(profileId).get().catch(() => null);
   const profile = doc?.data || null;
-  if (!profile || profile._openid !== openid) return fail('记录不存在');
+  if (!isOwnedByOpenid(profile, openid)) return fail('记录不存在');
 
   await db.collection('wish_profiles').doc(profileId).remove();
   return ok({ deleted: true });
@@ -1292,7 +1293,7 @@ async function handleProfileDelete(openid, data) {
 async function handlePersonList(openid, data) {
   const res = await db
     .collection('persons')
-    .where({ _openid: openid })
+    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
     .orderBy('updated_at', 'desc')
     .get();
   return ok(res.data || []);
@@ -1323,6 +1324,7 @@ async function handlePersonCreate(openid, data) {
   const now = nowDate();
   const addRes = await db.collection('persons').add({
     data: {
+      owner_openid: openid,
       name: name,
       category: category || null,
       id_card: idCard || null,
@@ -1333,7 +1335,7 @@ async function handlePersonCreate(openid, data) {
   });
 
   const doc = await db.collection('persons').doc(addRes._id).get();
-  return ok(doc.data);
+  return ok({ ...doc.data, id: addRes._id });
 }
 
 async function handlePersonUpdate(openid, data) {
@@ -1348,7 +1350,7 @@ async function handlePersonUpdate(openid, data) {
 
   const doc = await db.collection('persons').doc(personId).get().catch(() => null);
   const person = doc?.data || null;
-  if (!person || person._openid !== openid) return fail('人员信息不存在');
+  if (!isOwnedByOpenid(person, openid)) return fail('人员信息不存在');
 
   // 内容安全检查
   const sec = await msgSecCheck(name);
@@ -1385,7 +1387,7 @@ async function handlePersonDelete(openid, data) {
 
   const doc = await db.collection('persons').doc(personId).get().catch(() => null);
   const person = doc?.data || null;
-  if (!person || person._openid !== openid) return fail('人员信息不存在');
+  if (!isOwnedByOpenid(person, openid)) return fail('人员信息不存在');
 
   await db.collection('persons').doc(personId).remove();
   return ok({ deleted: true });
@@ -1396,7 +1398,7 @@ async function handleCategoryList(openid, data) {
   // 先获取用户自定义分类
   const customRes = await db
     .collection('person_categories')
-    .where({ _openid: openid })
+    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
     .orderBy('created_at', 'asc')
     .get();
   
@@ -1427,13 +1429,15 @@ async function handleCategoryCreate(openid, data) {
   if (!label) return fail('分类名称不能为空');
 
   // 检查是否已存在
-  const existing = await db
-    .collection('person_categories')
-    .where({ _openid: openid, value: value })
-    .limit(1)
-    .get();
+  const [existingOwner, existingLegacy] = await Promise.all([
+    db.collection('person_categories').where({ owner_openid: openid, value: value }).limit(1).get(),
+    db.collection('person_categories').where({ _openid: openid, value: value }).limit(1).get()
+  ]);
 
-  if (existing.data && existing.data.length > 0) {
+  if (
+    (existingOwner.data && existingOwner.data.length > 0) ||
+    (existingLegacy.data && existingLegacy.data.length > 0)
+  ) {
     return fail('该分类已存在');
   }
 
@@ -1449,6 +1453,7 @@ async function handleCategoryCreate(openid, data) {
   const now = nowDate();
   const addRes = await db.collection('person_categories').add({
     data: {
+      owner_openid: openid,
       value: value,
       label: label,
       icon: icon || null,
@@ -1459,7 +1464,7 @@ async function handleCategoryCreate(openid, data) {
   });
 
   const doc = await db.collection('person_categories').doc(addRes._id).get();
-  return ok({ ...doc.data, id: doc.data._id });
+  return ok({ ...doc.data, id: addRes._id });
 }
 
 async function handleCategoryUpdate(openid, data) {
@@ -1472,7 +1477,7 @@ async function handleCategoryUpdate(openid, data) {
 
   const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
   const category = doc?.data || null;
-  if (!category || category._openid !== openid) return fail('分类不存在');
+  if (!isOwnedByOpenid(category, openid)) return fail('分类不存在');
 
   if (category.is_default) {
     return fail('默认分类不能修改');
@@ -1491,7 +1496,7 @@ async function handleCategoryUpdate(openid, data) {
   });
 
   const updated = await db.collection('person_categories').doc(categoryId).get();
-  return ok({ ...updated.data, id: updated.data._id });
+  return ok({ ...updated.data, id: categoryId });
 }
 
 async function handleCategoryDelete(openid, data) {
@@ -1500,19 +1505,19 @@ async function handleCategoryDelete(openid, data) {
 
   const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
   const category = doc?.data || null;
-  if (!category || category._openid !== openid) return fail('分类不存在');
+  if (!isOwnedByOpenid(category, openid)) return fail('分类不存在');
 
   if (category.is_default) {
     return fail('默认分类不能删除');
   }
 
   // 检查是否有人员使用该分类
-  const personsRes = await db
-    .collection('persons')
-    .where({ _openid: openid, category: category.value })
-    .count();
+  const [ownerPersonsRes, legacyPersonsRes] = await Promise.all([
+    db.collection('persons').where({ owner_openid: openid, category: category.value }).count(),
+    db.collection('persons').where({ _openid: openid, category: category.value }).count()
+  ]);
   
-  if (personsRes.total > 0) {
+  if ((ownerPersonsRes.total || 0) + (legacyPersonsRes.total || 0) > 0) {
     return fail('该分类下还有人员，无法删除');
   }
 
