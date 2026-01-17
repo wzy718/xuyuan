@@ -5,6 +5,7 @@ import { authAPI, wishAPI, unlockAPI } from '../../utils/api'
 import { useAppStore } from '../../store'
 import type { AnalysisResult } from '../../types'
 import AnalysisModal from '../../components/AnalysisModal'
+import shareCoverImage from '../../assets/share-cover.png'
 import './index.scss'
 
 const LAST_ANALYSIS_STORAGE_KEY = 'bb_last_analysis'
@@ -445,7 +446,7 @@ export default function Index() {
     return {
       title: getRandomShareTitle(), // 随机显示分享标题
       path: sharePath,
-      imageUrl: '/assets/share-cover.jpg', // 分享封面图(需要准备 5:4 比例的图片)
+      imageUrl: shareCoverImage, // 分享封面图(需要准备 5:4 比例的图片)
       success: async (res: any) => {
         console.log('[分享] 分享成功回调触发', res)
         

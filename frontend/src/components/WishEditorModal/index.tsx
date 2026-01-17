@@ -3,6 +3,7 @@ import { View, Text, Input, Textarea, Button } from '@tarojs/components'
 import Taro, { useShareAppMessage } from '@tarojs/taro'
 import { wishAPI, unlockAPI, profileAPI, personAPI, categoryAPI } from '../../utils/api'
 import type { Wish, AnalysisResult, WishProfile, Person, PersonCategory } from '../../types'
+import shareCoverImage from '../../assets/share-cover.png'
 import './index.scss'
 
 declare const ENABLE_AD_UNLOCK: string
@@ -448,7 +449,7 @@ export default function WishEditorModal({
     return {
       title: getRandomShareTitle(), // 随机显示分享标题
       path: sharePath,
-      imageUrl: '/assets/share-cover.jpg', // 分享封面图(需要准备 5:4 比例的图片)
+      imageUrl: shareCoverImage, // 分享封面图(需要准备 5:4 比例的图片)
       success: async () => {
         const currentCtx =
           shareUnlockContextRef.current ||
