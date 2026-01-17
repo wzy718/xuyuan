@@ -7,10 +7,15 @@ import type { AnalysisResult } from '../../types'
 import AnalysisModal from '../../components/AnalysisModal'
 import './index.scss'
 
-declare const BANNER_AD_UNIT_ID: string
-
 const LAST_ANALYSIS_STORAGE_KEY = 'bb_last_analysis'
 const LAST_ANALYSIS_TTL_MS = 24 * 60 * 60 * 1000
+
+// 默认愿望文案（用户未输入时使用）
+const DEFAULT_WISH_TEXTS = [
+  '愿我今年暴富赚到 1 个亿',
+  '请菩萨保佑我升职加薪，当上总监',
+  '赐我一段美好的姻缘吧，对方要对我好，身材也要好，钱也赚的多'
+]
 
 type LastAnalysisCache = {
   wish_text: string
@@ -24,6 +29,11 @@ type LastAnalysisCache = {
 export default function Index() {
   const router = useRouter()
   const { setUser, isLoggedIn } = useAppStore()
+  // 初始化时随机选择一个默认文案
+  const [defaultWishText] = useState(() => {
+    const randomIndex = Math.floor(Math.random() * DEFAULT_WISH_TEXTS.length)
+    return DEFAULT_WISH_TEXTS[randomIndex]
+  })
   const [wishText, setWishText] = useState('')
   const [prefillDeity, setPrefillDeity] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
@@ -57,6 +67,9 @@ export default function Index() {
         analysis_results: Array.isArray(ar.analysis_results)
           ? ar.analysis_results
           : ([] as string[]).concat(ar.missing_elements || [], ar.possible_reasons || []),
+        suggested_deity: String(
+          ar.suggested_deity || ar?.full_result?.structured_suggestion?.suggested_deity || ''
+        ),
         case: String(ar.case || ar.failure_case || ''),
         posture: String(ar.posture || ar.correct_posture || ''),
         locked: Boolean(ar.locked),
@@ -213,6 +226,7 @@ export default function Index() {
         const nextResult: AnalysisResult = {
           analysis_id: analysisId,
           analysis_results: response.data?.analysis_results || cachedResult?.analysis_results || [],
+          suggested_deity: response.data?.suggested_deity || cachedResult?.suggested_deity || '',
           case: response.data?.case || cachedResult?.case || '',
           posture: response.data?.posture || cachedResult?.posture || '',
           locked: false,
@@ -254,6 +268,7 @@ export default function Index() {
               const nextResult: AnalysisResult = {
                 analysis_id: analysisId,
                 analysis_results: statusData.analysis_results || [],
+                suggested_deity: statusData.suggested_deity || '',
                 case: statusData.case || '',
                 posture: statusData.posture || '',
                 locked: false,
@@ -437,7 +452,8 @@ export default function Index() {
                 ...prev,
                 locked: false,
                 full_result: response.data.full_result || prev.full_result,
-                analysis_results: response.data.analysis_results || prev.analysis_results
+                analysis_results: response.data.analysis_results || prev.analysis_results,
+                suggested_deity: response.data.suggested_deity || prev.suggested_deity
               }
               writeLastAnalysisCache({
                 wish_text: wishText,
@@ -494,9 +510,10 @@ export default function Index() {
       return
     }
     
-    // 检查输入内容
-    if (!wishText || !wishText.trim()) {
-      console.log('输入内容为空')
+    // 检查输入内容，如果为空则使用默认文案
+    const finalWishText = (wishText && wishText.trim()) ? wishText.trim() : defaultWishText
+    if (!finalWishText) {
+      console.log('输入内容为空且无默认文案')
       Taro.showToast({ title: '请输入愿望内容', icon: 'none', duration: 2000 })
       return
     }
@@ -518,7 +535,12 @@ export default function Index() {
       return
     }
     
-    console.log('开始分析愿望...', { wishText: wishText.substring(0, 50) + '...', deity: prefillDeity })
+    console.log('开始分析愿望...', { wishText: finalWishText.substring(0, 50) + '...', deity: prefillDeity })
+    
+    // 如果使用的是默认文案且用户没有输入，更新 wishText 状态以便后续显示
+    if (!wishText || !wishText.trim()) {
+      setWishText(finalWishText)
+    }
     
     // 先显示弹窗和加载动画
     setShowModal(true)
@@ -531,14 +553,14 @@ export default function Index() {
     
     try {
       console.log('调用 wishAPI.analyze...')
-      const response = await wishAPI.analyze(wishText, prefillDeity || '')
+      const response = await wishAPI.analyze(finalWishText, prefillDeity || '')
       console.log('handleAnalyze - response:', JSON.stringify(response, null, 2))
       
       if (response.code === 0) {
         console.log('分析成功，设置结果:', JSON.stringify(response.data, null, 2))
         setAnalysisResult(response.data)
         writeLastAnalysisCache({
-          wish_text: wishText,
+          wish_text: finalWishText,
           deity: prefillDeity,
           analysis_result: response.data,
           unlocked: false,
@@ -602,14 +624,16 @@ export default function Index() {
           setUnlocked(true)
           setAnalysisResult({
             ...analysisResult,
-            full_result: response.data.full_result
+            full_result: response.data.full_result,
+            suggested_deity: response.data.suggested_deity || analysisResult.suggested_deity
           })
           writeLastAnalysisCache({
             wish_text: wishText,
             deity: prefillDeity,
             analysis_result: {
               ...analysisResult,
-              full_result: response.data.full_result
+              full_result: response.data.full_result,
+              suggested_deity: response.data.suggested_deity || analysisResult.suggested_deity
             },
             unlocked: true,
             modal_visible: true
@@ -641,9 +665,14 @@ export default function Index() {
 
   const handleRecordWish = () => {
     if (!analysisResult?.full_result) return
+    const suggestedDeityFromFull = analysisResult.full_result.structured_suggestion?.suggested_deity || ''
+    const suggestedDeity = suggestedDeityFromFull || analysisResult.suggested_deity || prefillDeity || ''
+    const optimizedText = analysisResult.full_result.optimized_text || wishText
     Taro.setStorageSync('bb_prefill_wish', {
-      deity: prefillDeity || '',
-      wish_text: wishText,
+      // “向谁许愿”优先使用 AI 的建议对象
+      deity: suggestedDeity,
+      // “愿望原文”记录为优化后的许愿稿，方便用户直接使用
+      wish_text: optimizedText,
       time_range: analysisResult.full_result.structured_suggestion?.time_range || '',
       target_quantify: analysisResult.full_result.structured_suggestion?.target_quantify || '',
       way_boundary: analysisResult.full_result.structured_suggestion?.way_boundary || '',
@@ -691,27 +720,14 @@ export default function Index() {
       </View>
 
       <View className="bb-section">
-        <View className="bb-card index-banner">
-          {/* 横幅广告 - 广告位 ID 在 config/dev.js 或 config/prod.js 中配置 */}
-          {typeof BANNER_AD_UNIT_ID !== 'undefined' && BANNER_AD_UNIT_ID !== 'adunit-xxxxxxxxxxxxxxxx' && (
-            <ad
-              unit-id={BANNER_AD_UNIT_ID}
-              ad-intervals={30}
-              onLoad={() => console.log('横幅广告加载成功')}
-              onError={(e) => console.error('横幅广告加载失败', e)}
-            />
-          )}
-        </View>
-      </View>
-
-      <View className="bb-section">
         <View className="bb-card index-input">
           <Text className="bb-card-title">最近许过什么愿？</Text>
           <Textarea
             className="index-textarea"
-            placeholder="请输入你最近许过但没成功的愿望..."
+            placeholder={defaultWishText}
             value={wishText}
             onInput={(e) => setWishText(e.detail.value)}
+            autoHeight
           />
           <Button className="bb-btn-primary index-analyze" loading={analyzing} onClick={handleAnalyze}>
             开始分析

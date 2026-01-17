@@ -116,6 +116,19 @@ export default function AnalysisModal({
             </View>
           </View>
 
+          {/* 建议许愿对象 */}
+          {!!result.suggested_deity && (
+            <View className="result-section">
+              <View className="section-header">
+                <Text className="section-icon">🙏</Text>
+                <Text className="section-title">建议许愿对象</Text>
+              </View>
+              <View className="section-content posture-box">
+                <Text className="posture-text">{result.suggested_deity}</Text>
+              </View>
+            </View>
+          )}
+
           {/* 类似失败案例（仅在不达标时展示） */}
           {!isQualified && (
             <View className="result-section">

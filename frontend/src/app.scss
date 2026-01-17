@@ -35,6 +35,11 @@ button::after {
   color: var(--bb-ink);
 }
 
+/* ScrollView 在小程序端需要显式高度，否则可能出现内容不渲染/白屏 */
+scroll-view.bb-page {
+  height: 100vh;
+}
+
 .bb-section {
   margin: 24rpx 24rpx 0;
 }

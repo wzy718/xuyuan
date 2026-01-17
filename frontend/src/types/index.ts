@@ -31,6 +31,8 @@ export interface AnalysisResult {
   analysis_id: string
   // 分析结果：按 6 条评价标准逐条对照，输出 0-6 条“可能导致失败的原因”
   analysis_results: string[]
+  // 建议许愿对象（如学业→文殊、姻缘→月老、犯太岁→太岁）
+  suggested_deity?: string
   // 戏剧化失败案例（达标时为正向建议）
   case: string
   // 最关键的改法
@@ -41,6 +43,7 @@ export interface AnalysisResult {
   full_result?: {
     optimized_text: string
     structured_suggestion: {
+      suggested_deity?: string
       time_range?: string
       target_quantify?: string
       way_boundary?: string

@@ -22,15 +22,6 @@
   color: var(--bb-muted);
 }
 
-.index-banner {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 200rpx;
-  padding: 0;
-  overflow: hidden;
-}
 
 .index-input {
   display: flex;
@@ -40,13 +31,16 @@
 
 .index-textarea {
   width: 100%;
-  min-height: 200rpx;
+  min-height: 80rpx; /* 约 2 行高度（26rpx 字体 + 行高约 1.5），autoHeight 时作为初始高度 */
   border: 1rpx solid rgba(201, 169, 98, 0.3);
   border-radius: 16rpx;
   padding: 18rpx;
   background: #fff;
   font-size: 26rpx;
+  line-height: 1.5;
   box-sizing: border-box;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .index-analyze {

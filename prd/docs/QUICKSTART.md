@@ -4,7 +4,7 @@
 
 - Node.js 16+
 - 微信小程序 AppID（已开通云开发）
-- 大模型 API Key（推荐：GLM-4.5-Flash；备选：Kimi；最后：DeepSeek）
+- 大模型 API Key（推荐：Qwen-Flash；备选：Kimi；最后：DeepSeek）
 
 ## 5分钟快速启动
 
@@ -36,11 +36,11 @@ npm run dev:weapp
 ### 步骤4：配置云函数环境变量（大模型）
 
 在云开发控制台为云函数配置环境变量：
-- （推荐）`ZHIPU_API_KEY`（优先 GLM-4.5-Flash；按 BigModel 文档直接作为 Bearer Key 使用；同时兼容旧式 `id.secret` 形态）
+- （推荐）`QWEN_API_KEY`（优先 Qwen-Flash；按 DashScope 兼容模式作为 Bearer Key 使用）
 - （可选）`MOONSHOT_API_KEY`（Kimi 备选）
 - （可选）`DEEPSEEK_API_KEY`（最后兜底）
-- （可选）`LLM_PROVIDER=auto|glm|zhipu|kimi|moonshot|deepseek`（不配置默认 `auto`，按 GLM→Kimi→DeepSeek 依次尝试）
-- （可选）`ZHIPU_MODEL` / `MOONSHOT_MODEL` / `DEEPSEEK_MODEL`
+- （可选）`LLM_PROVIDER=auto|qwen|dashscope|aliyun|kimi|moonshot|deepseek`（不配置默认 `auto`，按 Qwen→Kimi→DeepSeek 依次尝试）
+- （可选）`QWEN_MODEL` / `MOONSHOT_MODEL` / `DEEPSEEK_MODEL`
 
 ## 验证安装
 
@@ -63,7 +63,7 @@ npm run dev:weapp
 ### Q: 大模型调用失败
 
 **A:**
-1. 确认已配置至少一个 Key：`ZHIPU_API_KEY` / `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY`
+1. 确认已配置至少一个 Key：`QWEN_API_KEY` / `MOONSHOT_API_KEY` / `DEEPSEEK_API_KEY`
 2. 若指定了 `LLM_PROVIDER`，确认对应 Key 已配置且可用
 3. 检查余额/配额是否充足，或是否触发频控（429）
 4. 查看云函数日志了解具体错误信息

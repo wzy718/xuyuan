@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, Button, ScrollView } from '@tarojs/components'
+import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { authAPI, todoAPI, paymentAPI } from '../../utils/api'
 import { useAppStore } from '../../store'
@@ -192,7 +192,7 @@ export default function Wishes() {
   }
 
   return (
-    <ScrollView className="bb-page wishes-page" scrollY>
+    <View className="bb-page wishes-page">
       <View className="bb-section wishes-header">
         <View>
           <Text className="wishes-title">我的愿望</Text>
@@ -307,6 +307,6 @@ export default function Wishes() {
         onClose={() => setShowPayModal(false)}
         onPay={handlePay}
       />
-    </ScrollView>
+    </View>
   )
 }

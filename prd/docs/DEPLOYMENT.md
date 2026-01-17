@@ -204,11 +204,11 @@ DEEPSEEK_API_KEY=your_deepseek_api_key
 DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
 DEEPSEEK_MODEL=deepseek-chat
 
-# 大模型（推荐按 GLM→Kimi→DeepSeek 配置）
+# 大模型（推荐按 Qwen→Kimi→DeepSeek 配置）
 LLM_PROVIDER=auto
-ZHIPU_API_KEY=your_zhipu_api_key
-ZHIPU_API_URL=https://open.bigmodel.cn/api/paas/v4/chat/completions
-ZHIPU_MODEL=glm-4.5-flash
+QWEN_API_KEY=your_qwen_api_key
+QWEN_API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+QWEN_MODEL=qwen-flash
 
 MOONSHOT_API_KEY=your_moonshot_api_key
 MOONSHOT_API_URL=https://api.moonshot.cn/v1/chat/completions

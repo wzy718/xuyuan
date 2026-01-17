@@ -644,7 +644,7 @@ export default function WishEditorModal({
         <View className="wish-modal__header">
           <Text className="wish-modal__title">{title}</Text>
           <Text className="wish-modal__close" onClick={onClose}>
-            关闭
+            ×
           </Text>
         </View>
         <View className="wish-modal__body">
@@ -822,6 +822,9 @@ export default function WishEditorModal({
                   <Text className="wish-modal__analysis-item">
                     • {analysisResult.posture || '先补齐时间边界与量化目标'}
                   </Text>
+                  {!!analysisResult.suggested_deity && (
+                    <Text className="wish-modal__analysis-item">• 建议对象：{analysisResult.suggested_deity}</Text>
+                  )}
                 </View>
               </View>
               {!unlocked && (
@@ -926,12 +929,6 @@ export default function WishEditorModal({
           <Button className="bb-btn-primary" loading={saving} onClick={handleSubmit}>
             {confirmText}
           </Button>
-          <Button className="bb-btn-ghost" loading={analyzing} onClick={handleAnalyze}>
-            先分析一下
-          </Button>
-          <Button className="bb-btn-outline" loading={optimizing} onClick={handleOptimize}>
-            一键 AI 优化
-          </Button>
         </View>
       </View>
 
@@ -952,7 +949,7 @@ export default function WishEditorModal({
                   setSelectedCategory(null)
                 }}
               >
-                关闭
+                ×
               </Text>
             </View>
             <View className="wish-modal__body">
@@ -1144,7 +1141,7 @@ export default function WishEditorModal({
                   setCategoryForm({ value: '', label: '', icon: '' })
                 }}
               >
-                关闭
+                ×
               </Text>
             </View>
             <View className="wish-modal__body">

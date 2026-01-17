@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, Text, Button, ScrollView } from '@tarojs/components'
+import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { todoAPI, paymentAPI } from '../../utils/api'
 import type { Wish } from '../../types'
@@ -130,7 +130,7 @@ export default function WishDetail() {
   }
 
   return (
-    <ScrollView className="bb-page wish-detail" scrollY>
+    <View className="bb-page wish-detail">
       <View className="wish-detail__nav">
         <Text className="wish-detail__back" onClick={() => Taro.navigateBack()}>
           返回
@@ -259,6 +259,6 @@ export default function WishDetail() {
         onClose={() => setShowPayModal(false)}
         onPay={handlePay}
       />
-    </ScrollView>
+    </View>
   )
 }

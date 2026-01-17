@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 9999;
   padding: 24rpx;
 }
 
@@ -14,19 +14,25 @@
 .wish-modal__content {
   width: 100%;
   max-height: 82vh;
-  overflow: auto;
+  overflow: hidden;
   background: #fdfbf7;
   border-radius: 20rpx;
   border: 1rpx solid var(--bb-border);
   box-shadow: var(--bb-shadow);
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 标题栏：标题与关闭按钮 */
 .wish-modal__header {
-  padding: 16rpx 20rpx 0;
+  padding: 16rpx 20rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
+  background: #fdfbf7;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.04);
 }
 
 /* 标题文字 */
@@ -37,15 +43,30 @@
 
 /* 关闭按钮文字 */
 .wish-modal__close {
-  font-size: 26rpx;
-  color: var(--bb-muted);
-  padding: 8rpx 12rpx;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  line-height: 1;
+  color: rgba(44, 44, 44, 0.65);
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.35);
+  background: rgba(253, 251, 247, 0.92);
+  box-shadow: 0 4rpx 12rpx rgba(44, 44, 44, 0.06);
+}
+
+.wish-modal__close:active {
+  opacity: 0.75;
 }
 
 /* 主体区域：表单与分析区 */
 .wish-modal__body {
   padding: 12rpx 20rpx 6rpx;
   background: #fdfbf7;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 /* 单个表单字段的容器 */
@@ -847,8 +868,11 @@
 
 /* 底部按钮区域 */
 .wish-modal__footer {
-  padding: 0 20rpx 20rpx;
+  padding: 16rpx 20rpx 20rpx;
   display: grid;
   grid-template-columns: 1fr;
   gap: 12rpx;
+  flex: 0 0 auto;
+  background: #fdfbf7;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.04);
 }

@@ -391,7 +391,7 @@ function generateUnlockToken() {
  */
 async function quickAnalyzeWish(wishText, deity = '') {
   const systemPrompt = `你是愿望分析师。请基于用户输入，输出严格 JSON（不要 markdown、不要代码块、不要额外解释）：
-{"analysis_results":["原因和后果1"],"case":"戏剧化失败案例或正向建议","posture":"关键改法"}
+{"analysis_results":["原因和后果1"],"case":"戏剧化失败案例或正向建议","posture":"关键改法","suggested_deity":"建议许愿对象"}
 
 评价标准（6个要素）：
 1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
@@ -409,7 +409,10 @@ async function quickAnalyzeWish(wishText, deity = '') {
    - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
    - 否则 case 必须是“戏剧化失败案例”，要贴合用户不规范的描述，并与 analysis_results 强相关，20-100 字。
 3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
-4. 禁止违法违规、伤害他人、诈骗赌博等；不要编造任何身份证号码（仅使用“使用占位符”提示）。`;
+4. suggested_deity：结合愿望内容给出“建议许愿对象”。
+   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
+   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+5. 禁止违法违规、伤害他人、诈骗赌博等；不要编造任何身份证号码（仅使用“使用占位符”提示）。`;
 
   const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
   const llmRes = await callChatCompletion({
@@ -427,11 +430,13 @@ async function quickAnalyzeWish(wishText, deity = '') {
     const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
     const caseText = ensureString(parsed?.case || '').trim() || (isQualified ? QUALIFIED_CASE_TEXT : '');
     const posture = ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间与量化目标');
+    const suggestedDeity = ensureString(parsed?.suggested_deity || '').trim() || deity;
 
     const result = {
       analysis_results: analysisResults.length > 0 ? analysisResults : [QUALIFIED_ANALYSIS_RESULT],
       case: caseText || '小王许愿“想暴富”，没写时间和方式，结果中了张5元刮刮乐还以为“显灵”，转头继续躺平，年底还是月光。',
-      posture
+      posture,
+      suggested_deity: suggestedDeity
     };
 
     console.log('quickAnalyzeWish - result:', JSON.stringify(result, null, 2));
@@ -441,7 +446,8 @@ async function quickAnalyzeWish(wishText, deity = '') {
     return {
       analysis_results: ['缺时间边界，易拖延', '缺量化目标，易自嗨'],
       case: '小李许愿“要上985”，没说哪所也没写分数，结果打车来辆尾号985，激动到忘了复习，期末照旧。',
-      posture: '先补齐时间+量化目标'
+      posture: '先补齐时间+量化目标',
+      suggested_deity: deity
     };
   }
 }
@@ -457,6 +463,7 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {})
 {
   "optimized_text": "优化后的许愿稿",
   "structured_suggestion": {
+    "suggested_deity": "建议许愿对象",
     "time_range": "时间范围",
     "target_quantify": "量化目标",
     "way_boundary": "方式边界",
@@ -473,7 +480,11 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {})
 3. steps 3-5条
 4. warnings 0-3条（可为空数组）
 5. 必须包含“许愿人：姓名（身份证号：使用占位符）”，不要编造任何身份证号码
-6. 所有内容避免违法违规、伤害他人、诈骗赌博等，并包含“合法合规、不伤害他人”等边界表述`;
+6. suggested_deity：
+   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
+   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+
+7. 所有内容避免违法违规、伤害他人、诈骗赌博等，并包含“合法合规、不伤害他人”等边界表述`;
 
   const userPrompt = `优化愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
@@ -503,7 +514,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
   } catch (error) {
     return {
       optimized_text: content || wishText,
-      structured_suggestion: {},
+      structured_suggestion: deity ? { suggested_deity: deity } : {},
       steps: [],
       warnings: []
     };
@@ -520,9 +531,11 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
   "analysis_results": ["原因和后果1","原因和后果2"],
   "case": "戏剧化失败案例或正向建议",
   "posture": "关键改法（30字内）",
+  "suggested_deity": "建议许愿对象",
   "full_result": {
     "optimized_text": "优化后的许愿稿（80-160字）",
     "structured_suggestion": {
+      "suggested_deity": "建议许愿对象",
       "time_range": "时间边界",
       "target_quantify": "量化目标",
       "way_boundary": "方式与边界",
@@ -551,12 +564,15 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
    - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
    - 否则 case 必须是“戏剧化失败案例，有梗有趣有传播性”，要贴合用户不规范的描述，并且与 analysis_results 强相关，包含“人物+许愿内容+误解/偏差+戏剧化结果”，20-100字。
 3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
-4. full_result：
+4. suggested_deity：
+   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
+   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+5. full_result：
    - optimized_text：80-160字，完整、可直接复制的许愿稿，必须补齐缺失要素（时间、量化、边界、行动、还愿、许愿人信息等；还愿可选但建议加）
    - structured_suggestion：把 6 要素拆到对应字段（缺啥补啥）
    - steps：3-5条，可执行，避免空话
    - warnings：0-3条（可为空数组），用于提醒合法合规与边界
-5. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要编造任何身份证号码（仅使用占位符提示，如：许愿人：张三（身份证号：使用占位符））。`;
+6. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要编造任何身份证号码（仅使用占位符提示，如：许愿人：张三（身份证号：使用占位符））。`;
 
   const userPrompt = `请分析并优化以下愿望：
 ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
@@ -565,7 +581,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
     systemPrompt,
     userPrompt,
     temperature: 0.2,
-    maxTokens: 1000,
+    maxTokens: 1500,
     timeoutMs: 60000
   });
   const content = llmRes?.content || '';
@@ -578,13 +594,15 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
 
   const analysisResults = normalizeAnalysisResults(parsed?.analysis_results);
   const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
+  const suggestedDeityFinal = ensureString(parsed?.suggested_deity || '').trim() || deity;
 
   const quickResult = {
     analysis_results: analysisResults.length > 0 ? analysisResults : [QUALIFIED_ANALYSIS_RESULT],
     case:
       ensureString(parsed?.case || '').trim() ||
       (isQualified ? QUALIFIED_CASE_TEXT : '小王许愿“要暴富”，没写时间与方式，结果拿到一笔误打款还以为显灵，追回后瞬间破防。'),
-    posture: ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间边界与量化目标')
+    posture: ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间边界与量化目标'),
+    suggested_deity: suggestedDeityFinal
   };
 
   const rawFull = parsed.full_result && typeof parsed.full_result === 'object' ? parsed.full_result : {};
@@ -597,6 +615,14 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
     steps: Array.isArray(rawFull.steps) ? rawFull.steps : [],
     warnings: Array.isArray(rawFull.warnings) ? rawFull.warnings : []
   };
+  if (suggestedDeityFinal) {
+    if (!fullResult.structured_suggestion || typeof fullResult.structured_suggestion !== 'object') {
+      fullResult.structured_suggestion = {};
+    }
+    if (!fullResult.structured_suggestion.suggested_deity) {
+      fullResult.structured_suggestion.suggested_deity = suggestedDeityFinal;
+    }
+  }
 
   return { quickResult, fullResult, llm: llmRes?.llm || null };
 }
@@ -801,7 +827,8 @@ async function handleWishAnalyze(openid, data) {
       analysis_result: {
         analysis_results: quickResult.analysis_results,
         case: quickResult.case,
-        posture: quickResult.posture
+        posture: quickResult.posture,
+        suggested_deity: quickResult.suggested_deity || ''
       },
       // 预生成缓存，解锁后直接读取；若为空则解锁时补算
       full_result: fullResult,
@@ -818,6 +845,7 @@ async function handleWishAnalyze(openid, data) {
     analysis_results: quickResult.analysis_results,
     case: quickResult.case,
     posture: quickResult.posture,
+    suggested_deity: quickResult.suggested_deity || '',
     locked: true,
     unlock_token: unlockToken,
     unlock_token_expires_at: unlockTokenExpiresAt.getTime(),
@@ -916,6 +944,7 @@ async function handleUnlock(openid, data) {
         analysis_results: existingAnalysis.analysis_result?.analysis_results || [],
         case: existingAnalysis.analysis_result?.case || '',
         posture: existingAnalysis.analysis_result?.posture || '',
+        suggested_deity: existingAnalysis.analysis_result?.suggested_deity || '',
         full_result: fullResult
       });
     }
@@ -974,6 +1003,7 @@ async function handleUnlock(openid, data) {
     analysis_results: analysis.analysis_result?.analysis_results || [],
     case: analysis.analysis_result?.case || '',
     posture: analysis.analysis_result?.posture || '',
+    suggested_deity: analysis.analysis_result?.suggested_deity || '',
     full_result: fullResult
   });
 }
@@ -998,6 +1028,7 @@ async function handleUnlockStatus(openid, data) {
       analysis_results: analysis.analysis_result?.analysis_results || [],
       case: analysis.analysis_result?.case || '',
       posture: analysis.analysis_result?.posture || '',
+      suggested_deity: analysis.analysis_result?.suggested_deity || '',
       full_result: analysis.full_result || null
     });
   }
