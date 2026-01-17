@@ -9,6 +9,12 @@
   gap: 16rpx;
 }
 
+.wishes-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 .wishes-title {
   font-size: 36rpx;
   font-weight: 600;
@@ -89,6 +95,27 @@
   color: var(--bb-ink);
 }
 
+.wishes-card__success-hint {
+  padding: 16rpx;
+  background: rgba(201, 169, 98, 0.08);
+  border-radius: 12rpx;
+  border: 1rpx solid rgba(201, 169, 98, 0.3);
+  display: grid;
+  gap: 8rpx;
+}
+
+.wishes-card__success-text {
+  font-size: 24rpx;
+  color: var(--bb-gold-strong);
+  line-height: 1.6;
+}
+
+.wishes-card__return-wish {
+  font-size: 22rpx;
+  color: var(--bb-muted);
+  line-height: 1.5;
+}
+
 .wishes-card__meta {
   display: flex;
   gap: 10rpx;
@@ -101,8 +128,50 @@
   gap: 10rpx;
 }
 
-.wishes-add {
-  padding-bottom: 40rpx;
+.wishes-add-btn {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4af6a 0%, #c9a962 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4rpx 16rpx rgba(201, 169, 98, 0.25), 
+              0 2rpx 8rpx rgba(201, 169, 98, 0.15);
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.wishes-add-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.wishes-add-btn:active {
+  transform: scale(0.92);
+  box-shadow: 0 2rpx 8rpx rgba(201, 169, 98, 0.3), 
+              0 1rpx 4rpx rgba(201, 169, 98, 0.2);
+}
+
+.wishes-add-btn:active::before {
+  opacity: 1;
+}
+
+.wishes-add-btn__icon {
+  font-size: 40rpx;
+  color: #fff;
+  line-height: 1;
+  font-weight: 300;
+  text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
 }
 
 .wishes-login-section {

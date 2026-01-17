@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { authAPI, todoAPI, paymentAPI } from '../../utils/api'
+import { authAPI, todoAPI } from '../../utils/api'
 import { useAppStore } from '../../store'
 import type { Wish } from '../../types'
 import WishEditorModal from '../../components/WishEditorModal'
-import PayWishModal from '../../components/PayWishModal'
 import './index.scss'
 
 type FilterKey = 'all' | 'ongoing' | 'success'
@@ -18,8 +17,6 @@ export default function Wishes() {
   const [showEditor, setShowEditor] = useState(false)
   const [editingWish, setEditingWish] = useState<Partial<Wish> | null>(null)
   const [editingWishId, setEditingWishId] = useState<string | null>(null)
-  const [showPayModal, setShowPayModal] = useState(false)
-  const [payWish, setPayWish] = useState<Wish | null>(null)
 
   useEffect(() => {
     Taro.showShareMenu({
@@ -132,9 +129,15 @@ export default function Wishes() {
   const handleMarkSuccess = async (wish: Wish) => {
     const response = await todoAPI.update(wish.id, { status: 1 })
     if (response.code === 0) {
+      Taro.showModal({
+        title: '恭喜达成',
+        content: '愿望已标记为成功！记得还愿哦，感恩诸佛菩萨的护佑。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       await loadWishes()
-      setPayWish({ ...wish, status: 1 })
-      setShowPayModal(true)
+    } else {
+      Taro.showToast({ title: response.msg || '标记失败', icon: 'none' })
     }
   }
 
@@ -162,34 +165,6 @@ export default function Wishes() {
     Taro.switchTab({ url: '/pages/index/index' })
   }
 
-  const handlePay = async (payload: { deity: string; text: string; note: string }) => {
-    if (!payWish) return
-    const response = await paymentAPI.createOrder(
-      payWish.id,
-      payload.deity,
-      payload.text,
-      payload.note
-    )
-    if (response.code !== 0) {
-      Taro.showToast({ title: response.msg || '支付失败', icon: 'none' })
-      return
-    }
-    try {
-      await Taro.requestPayment({
-        timeStamp: response.data.payment_params.timeStamp,
-        nonceStr: response.data.payment_params.nonceStr,
-        package: response.data.payment_params.package,
-        signType: response.data.payment_params.signType,
-        paySign: response.data.payment_params.paySign
-      })
-      Taro.showToast({ title: '支付成功', icon: 'success' })
-      setShowPayModal(false)
-    } catch (error: any) {
-      if (error.errMsg !== 'requestPayment:fail cancel') {
-        Taro.showToast({ title: error.message || '支付失败', icon: 'none' })
-      }
-    }
-  }
 
   return (
     <View className="bb-page wishes-page">
@@ -198,16 +173,29 @@ export default function Wishes() {
           <Text className="wishes-title">我的愿望</Text>
           <Text className="wishes-subtitle">记录每一份心愿，追踪实现进度</Text>
         </View>
-        {!isLoggedIn && (
-          <Button 
-            className="bb-btn-outline" 
-            onClick={handleLogin}
-            loading={loggingIn}
-            disabled={loggingIn}
-          >
-            登录
-          </Button>
-        )}
+        <View className="wishes-header__actions">
+          {isLoggedIn ? (
+            <View
+              className="wishes-add-btn"
+              onClick={() => {
+                setEditingWish(null)
+                setEditingWishId(null)
+                setShowEditor(true)
+              }}
+            >
+              <Text className="wishes-add-btn__icon">➕</Text>
+            </View>
+          ) : (
+            <Button 
+              className="bb-btn-outline" 
+              onClick={handleLogin}
+              loading={loggingIn}
+              disabled={loggingIn}
+            >
+              登录
+            </Button>
+          )}
+        </View>
       </View>
 
       <View className="bb-section wishes-filters">
@@ -244,6 +232,14 @@ export default function Wishes() {
               </Text>
             </View>
             <Text className="wishes-card__text">{wish.wish_text}</Text>
+            {wish.status === 1 && (
+              <View className="wishes-card__success-hint">
+                <Text className="wishes-card__success-text">🎉 恭喜达成！记得还愿，感恩护佑。</Text>
+                {wish.return_wish && (
+                  <Text className="wishes-card__return-wish">还愿承诺：{wish.return_wish}</Text>
+                )}
+              </View>
+            )}
             <View className="wishes-card__meta">
               {wish.time_range && <Text className="bb-chip">时间：{wish.time_range}</Text>}
               {wish.target_quantify && <Text className="bb-chip">目标：{wish.target_quantify}</Text>}
@@ -252,19 +248,9 @@ export default function Wishes() {
               <Button className="bb-btn-ghost" onClick={() => handleAnalyze(wish)}>
                 分析
               </Button>
-              {wish.status !== 1 ? (
+              {wish.status !== 1 && (
                 <Button className="bb-btn-outline" onClick={() => handleMarkSuccess(wish)}>
                   标记成功
-                </Button>
-              ) : (
-                <Button
-                  className="bb-btn-outline"
-                  onClick={() => {
-                    setPayWish(wish)
-                    setShowPayModal(true)
-                  }}
-                >
-                  1 元代还愿
                 </Button>
               )}
               <Button className="bb-btn-outline" onClick={() => handleDelete(wish)}>
@@ -273,19 +259,6 @@ export default function Wishes() {
             </View>
           </View>
         ))}
-      </View>
-
-      <View className="bb-section wishes-add">
-        <Button
-          className="bb-btn-primary"
-          onClick={() => {
-            setEditingWish(null)
-            setEditingWishId(null)
-            setShowEditor(true)
-          }}
-        >
-          新增愿望
-        </Button>
       </View>
 
       <WishEditorModal
@@ -299,13 +272,6 @@ export default function Wishes() {
           setEditingWishId(null)
         }}
         onSubmit={handleSubmitWish}
-      />
-
-      <PayWishModal
-        open={showPayModal}
-        wish={payWish}
-        onClose={() => setShowPayModal(false)}
-        onPay={handlePay}
       />
     </View>
   )

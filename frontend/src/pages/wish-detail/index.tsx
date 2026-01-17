@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
-import { todoAPI, paymentAPI } from '../../utils/api'
+import { todoAPI } from '../../utils/api'
 import type { Wish } from '../../types'
 import WishEditorModal from '../../components/WishEditorModal'
-import PayWishModal from '../../components/PayWishModal'
 import './index.scss'
 
 export default function WishDetail() {
@@ -12,7 +11,6 @@ export default function WishDetail() {
   const wishId = router.params?.id || ''
   const [wish, setWish] = useState<Wish | null>(null)
   const [showEditor, setShowEditor] = useState(false)
-  const [showPayModal, setShowPayModal] = useState(false)
 
   const loadWish = async () => {
     if (!wishId) return
@@ -59,8 +57,15 @@ export default function WishDetail() {
     if (!wish) return
     const response = await todoAPI.update(wish.id, { status: 1 })
     if (response.code === 0) {
+      Taro.showModal({
+        title: '恭喜达成',
+        content: '愿望已标记为成功！记得还愿哦，感恩诸佛菩萨的护佑。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       await loadWish()
-      setShowPayModal(true)
+    } else {
+      Taro.showToast({ title: response.msg || '标记失败', icon: 'none' })
     }
   }
 
@@ -90,34 +95,6 @@ export default function WishDetail() {
     }
   }
 
-  const handlePay = async (payload: { deity: string; text: string; note: string }) => {
-    if (!wish) return
-    const response = await paymentAPI.createOrder(
-      wish.id,
-      payload.deity,
-      payload.text,
-      payload.note
-    )
-    if (response.code !== 0) {
-      Taro.showToast({ title: response.msg || '支付失败', icon: 'none' })
-      return
-    }
-    try {
-      await Taro.requestPayment({
-        timeStamp: response.data.payment_params.timeStamp,
-        nonceStr: response.data.payment_params.nonceStr,
-        package: response.data.payment_params.package,
-        signType: response.data.payment_params.signType,
-        paySign: response.data.payment_params.paySign
-      })
-      Taro.showToast({ title: '支付成功', icon: 'success' })
-      setShowPayModal(false)
-    } catch (error: any) {
-      if (error.errMsg !== 'requestPayment:fail cancel') {
-        Taro.showToast({ title: error.message || '支付失败', icon: 'none' })
-      }
-    }
-  }
 
   if (!wish) {
     return (
@@ -205,12 +182,17 @@ export default function WishDetail() {
 
       {wish.status === 1 && (
         <View className="bb-section">
-          <View className="bb-card wish-detail__repay">
-            <Text className="bb-card-title">还愿状态</Text>
-            <Text className="bb-muted">你之前承诺：{wish.return_wish || '未填写'}</Text>
-            <Button className="bb-btn-primary" onClick={() => setShowPayModal(true)}>
-              1 元代还愿
-            </Button>
+          <View className="bb-card wish-detail__success-hint">
+            <Text className="bb-card-title">🎉 恭喜达成</Text>
+            <Text className="wish-detail__success-text">
+              愿望已成功实现！记得还愿，感恩诸佛菩萨的慈悲护佑。
+            </Text>
+            {wish.return_wish && (
+              <View className="wish-detail__return-hint">
+                <Text className="wish-detail__return-label">你之前承诺的还愿：</Text>
+                <Text className="wish-detail__return-text">{wish.return_wish}</Text>
+              </View>
+            )}
           </View>
         </View>
       )}
@@ -251,13 +233,6 @@ export default function WishDetail() {
         initialWish={wish}
         onClose={() => setShowEditor(false)}
         onSubmit={handleSaveEdit}
-      />
-
-      <PayWishModal
-        open={showPayModal}
-        wish={wish}
-        onClose={() => setShowPayModal(false)}
-        onPay={handlePay}
       />
     </View>
   )
