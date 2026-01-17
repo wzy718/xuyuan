@@ -17,6 +17,8 @@ export default function Wishes() {
   const [showEditor, setShowEditor] = useState(false)
   const [editingWish, setEditingWish] = useState<Partial<Wish> | null>(null)
   const [editingWishId, setEditingWishId] = useState<string | null>(null)
+  const [isManageMode, setIsManageMode] = useState(false)
+  const [selectedWishIds, setSelectedWishIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     Taro.showShareMenu({
@@ -156,13 +158,62 @@ export default function Wishes() {
     })
   }
 
-  const handleAnalyze = (wish: Wish) => {
-    Taro.setStorageSync('bb_analyze_wish', {
-      wish_text: wish.wish_text,
-      deity: wish.deity || '',
-      autoAnalyze: true
+  const handleToggleManageMode = () => {
+    setIsManageMode(!isManageMode)
+    setSelectedWishIds(new Set())
+  }
+
+  const handleToggleSelect = (wishId: string) => {
+    const newSelected = new Set(selectedWishIds)
+    if (newSelected.has(wishId)) {
+      newSelected.delete(wishId)
+    } else {
+      newSelected.add(wishId)
+    }
+    setSelectedWishIds(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    const allIds = new Set(filteredWishes.map((wish) => wish.id))
+    setSelectedWishIds(allIds)
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedWishIds(new Set())
+  }
+
+  const handleBatchDelete = () => {
+    if (selectedWishIds.size === 0) {
+      Taro.showToast({ title: '请先选择要删除的愿望', icon: 'none' })
+      return
+    }
+    Taro.showModal({
+      title: '批量删除',
+      content: `确定要删除选中的 ${selectedWishIds.size} 条愿望吗？`,
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          const deletePromises = Array.from(selectedWishIds).map((id) =>
+            todoAPI.delete(id)
+          )
+          const results = await Promise.all(deletePromises)
+          const successCount = results.filter((r) => r.code === 0).length
+          if (successCount > 0) {
+            Taro.showToast({
+              title: `已删除 ${successCount} 条愿望`,
+              icon: 'success'
+            })
+            setSelectedWishIds(new Set())
+            setIsManageMode(false)
+            await loadWishes()
+          } else {
+            Taro.showToast({ title: '删除失败', icon: 'none' })
+          }
+        } catch (error) {
+          Taro.showToast({ title: '删除异常', icon: 'none' })
+        }
+      }
     })
-    Taro.switchTab({ url: '/pages/index/index' })
   }
 
 
@@ -199,20 +250,59 @@ export default function Wishes() {
       </View>
 
       <View className="bb-section wishes-filters">
-        {([
-          { key: 'all', label: `全部(${wishes.length})` },
-          { key: 'ongoing', label: `进行中(${wishes.filter((wish) => wish.status !== 1).length})` },
-          { key: 'success', label: `已成功(${wishes.filter((wish) => wish.status === 1).length})` }
-        ] as const).map((item) => (
-          <View
-            key={item.key}
-            className={`wishes-filter ${filter === item.key ? 'is-active' : ''}`}
-            onClick={() => setFilter(item.key)}
+        <View className="wishes-filters__left">
+          {([
+            { key: 'all', label: `全部(${wishes.length})` },
+            { key: 'ongoing', label: `进行中(${wishes.filter((wish) => wish.status !== 1).length})` },
+            { key: 'success', label: `已成功(${wishes.filter((wish) => wish.status === 1).length})` }
+          ] as const).map((item) => (
+            <View
+              key={item.key}
+              className={`wishes-filter ${filter === item.key ? 'is-active' : ''}`}
+              onClick={() => setFilter(item.key)}
+            >
+              {item.label}
+            </View>
+          ))}
+        </View>
+        {!isManageMode && wishes.filter((wish) => wish.status === 1).length > 0 && (
+          <Button
+            className="bb-btn-outline wishes-filters__manage"
+            onClick={handleToggleManageMode}
           >
-            {item.label}
-          </View>
-        ))}
+            管理
+          </Button>
+        )}
       </View>
+
+      {isManageMode && (
+        <View className="wishes-manage-bar">
+          <View className="wishes-manage-bar__left">
+            {selectedWishIds.size === filteredWishes.length ? (
+              <Button className="bb-btn-ghost wishes-manage-bar__select" onClick={handleDeselectAll}>
+                取消全选
+              </Button>
+            ) : (
+              <Button className="bb-btn-ghost wishes-manage-bar__select" onClick={handleSelectAll}>
+                全选
+              </Button>
+            )}
+            <Text className="wishes-manage-bar__text">
+              {selectedWishIds.size > 0 ? `已选择 ${selectedWishIds.size} 项` : '未选择'}
+            </Text>
+          </View>
+          <View className="wishes-manage-bar__right">
+            {selectedWishIds.size > 0 && (
+              <Button className="bb-btn-outline wishes-manage-bar__delete" onClick={handleBatchDelete}>
+                批量删除
+              </Button>
+            )}
+            <Button className="bb-btn-ghost wishes-manage-bar__cancel" onClick={handleToggleManageMode}>
+              取消
+            </Button>
+          </View>
+        </View>
+      )}
 
       <View className="bb-section wishes-list">
         {loading && <Text className="bb-muted">加载中...</Text>}
@@ -222,10 +312,29 @@ export default function Wishes() {
         {filteredWishes.map((wish) => (
           <View
             key={wish.id}
-            className="wishes-card"
-            onClick={() => Taro.navigateTo({ url: `/pages/wish-detail/index?id=${wish.id}` })}
+            className={`wishes-card ${isManageMode ? 'is-manage-mode' : ''} ${selectedWishIds.has(wish.id) ? 'is-selected' : ''}`}
+            onClick={() => {
+              if (!isManageMode) {
+                Taro.navigateTo({ url: `/pages/wish-detail/index?id=${wish.id}` })
+              } else {
+                handleToggleSelect(wish.id)
+              }
+            }}
           >
             <View className="wishes-card__header">
+              {isManageMode && (
+                <View
+                  className={`wishes-card__checkbox ${selectedWishIds.has(wish.id) ? 'is-selected' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleToggleSelect(wish.id)
+                  }}
+                >
+                  <Text className="wishes-card__checkbox-icon">
+                    {selectedWishIds.has(wish.id) ? '✓' : ''}
+                  </Text>
+                </View>
+              )}
               <Text className="wishes-card__deity">{wish.deity || '心愿对象'}</Text>
               <Text className={`wishes-card__status ${wish.status === 1 ? 'is-success' : ''}`}>
                 {wish.status === 1 ? '已成功' : '进行中'}
@@ -244,19 +353,15 @@ export default function Wishes() {
               {wish.time_range && <Text className="bb-chip">时间：{wish.time_range}</Text>}
               {wish.target_quantify && <Text className="bb-chip">目标：{wish.target_quantify}</Text>}
             </View>
-            <View className="wishes-card__actions" onClick={(e) => e.stopPropagation()}>
-              <Button className="bb-btn-ghost" onClick={() => handleAnalyze(wish)}>
-                分析
-              </Button>
-              {wish.status !== 1 && (
-                <Button className="bb-btn-outline" onClick={() => handleMarkSuccess(wish)}>
-                  标记成功
-                </Button>
-              )}
-              <Button className="bb-btn-outline" onClick={() => handleDelete(wish)}>
-                删除
-              </Button>
-            </View>
+            {!isManageMode && (
+              <View className="wishes-card__actions" onClick={(e) => e.stopPropagation()}>
+                {wish.status !== 1 && (
+                  <Button className="bb-btn-outline" onClick={() => handleMarkSuccess(wish)}>
+                    标记成功
+                  </Button>
+                )}
+              </View>
+            )}
           </View>
         ))}
       </View>

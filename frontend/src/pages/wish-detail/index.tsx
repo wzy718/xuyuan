@@ -108,14 +108,6 @@ export default function WishDetail() {
 
   return (
     <View className="bb-page wish-detail">
-      <View className="wish-detail__nav">
-        <Text className="wish-detail__back" onClick={() => Taro.navigateBack()}>
-          返回
-        </Text>
-        <Text className="wish-detail__delete" onClick={handleDelete}>
-          删除
-        </Text>
-      </View>
 
       <View className="bb-section">
         <View className="bb-card wish-detail__hero">
