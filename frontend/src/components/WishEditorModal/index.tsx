@@ -28,6 +28,20 @@ const emptyWish: Partial<Wish> = {
   return_wish: ''
 }
 
+// 分享标题文案（随机显示）
+const SHARE_TITLES = [
+  '快来测测你的愿望能不能实现🎯',
+  '愿望没实现？可能是这些原因🔍',
+  '分享一个超准的愿望分析工具🌟',
+  '测了个我许的愿望，结果惊呆了😳'
+]
+
+// 随机获取分享标题
+const getRandomShareTitle = () => {
+  const randomIndex = Math.floor(Math.random() * SHARE_TITLES.length)
+  return SHARE_TITLES[randomIndex]
+}
+
 const BENEFICIARY_OPTIONS = [
   { value: 'self', label: '自己', icon: '🧑' },
   { value: 'family', label: '家人', icon: '👨‍👩‍👧' },
@@ -421,7 +435,7 @@ export default function WishEditorModal({
   }, [persons, wish.beneficiary_type])
 
   useShareAppMessage(() => {
-    // 分享后点“查看分享页”会打开这里配置的 path；为了避免回到首页后看不到要解锁的内容，
+    // 分享后点"查看分享页"会打开这里配置的 path；为了避免回到首页后看不到要解锁的内容，
     // 这里将解锁所需的参数带到 Tab1（愿望分析页），由页面自行处理并展示解锁结果。
     let sharePath = '/pages/index/index'
     const ctx = shareUnlockContextRef.current || shareUnlockContext
@@ -432,8 +446,9 @@ export default function WishEditorModal({
       sharePath = `/pages/index/index?analysis_id=${analysisResult.analysis_id}&unlock_token=${analysisResult.unlock_token}`
     }
     return {
-      title: '拜拜：愿望分析助手',
+      title: getRandomShareTitle(), // 随机显示分享标题
       path: sharePath,
+      imageUrl: '/assets/share-cover.jpg', // 分享封面图(需要准备 5:4 比例的图片)
       success: async () => {
         const currentCtx =
           shareUnlockContextRef.current ||

@@ -2,7 +2,9 @@
  * 分析结果弹窗组件
  * 显示愿望分析结果：分析结果、失败案例、正确姿势
  */
+import { useEffect, useRef } from 'react'
 import { View, Text, Button } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import type { AnalysisResult } from '../../types'
 import './index.scss'
 
@@ -10,6 +12,15 @@ declare const INTERSTITIAL_AD_UNIT_ID: string
 declare const ENABLE_AD_UNLOCK: string
 
 const QUALIFIED_ANALYSIS_RESULT = '基本要素齐全，可进一步润色表达'
+
+// 检查广告位 ID 是否已配置
+const isAdUnitIdConfigured = (adUnitId: string | undefined): boolean => {
+  return (
+    typeof adUnitId !== 'undefined' &&
+    adUnitId !== 'adunit-xxxxxxxxxxxxxxxx' &&
+    adUnitId.trim() !== ''
+  )
+}
 
 interface AnalysisModalProps {
   visible: boolean
@@ -38,6 +49,92 @@ export default function AnalysisModal({
   mode = 'modal'
 }: AnalysisModalProps) {
   if (!visible) return null
+
+  // 插屏广告实例引用
+  const interstitialAdRef = useRef<any>(null)
+  const adShownRef = useRef(false)
+
+  // 检查插屏广告位 ID 是否已配置
+  const interstitialAdUnitId =
+    typeof INTERSTITIAL_AD_UNIT_ID !== 'undefined' ? INTERSTITIAL_AD_UNIT_ID : undefined
+  const isInterstitialAdEnabled = isAdUnitIdConfigured(interstitialAdUnitId)
+
+  // 初始化插屏广告
+  useEffect(() => {
+    if (isInterstitialAdEnabled && interstitialAdUnitId) {
+      try {
+        // 使用 Taro API 创建插屏广告实例
+        // 注意：如果 Taro 版本不支持，可以使用 (Taro as any).createInterstitialAd 或直接使用 wx
+        const createAd = (Taro as any).createInterstitialAd || ((Taro as any).wx && (Taro as any).wx.createInterstitialAd)
+        
+        if (createAd) {
+          const interstitialAd = createAd({
+            adUnitId: interstitialAdUnitId
+          })
+
+          // 监听广告加载成功
+          interstitialAd.onLoad(() => {
+            console.log('插屏广告加载成功')
+          })
+
+          // 监听广告加载失败
+          interstitialAd.onError((err: any) => {
+            console.error('插屏广告加载失败', err)
+          })
+
+          // 监听广告关闭
+          interstitialAd.onClose(() => {
+            console.log('插屏广告关闭')
+            adShownRef.current = false
+          })
+
+          interstitialAdRef.current = interstitialAd
+        } else {
+          console.warn('当前 Taro 版本可能不支持 createInterstitialAd，请检查 Taro 版本或使用原生 wx API')
+        }
+      } catch (error) {
+        console.error('创建插屏广告失败', error)
+      }
+    }
+
+    // 清理函数
+    return () => {
+      if (interstitialAdRef.current) {
+        try {
+          interstitialAdRef.current.destroy?.()
+        } catch (error) {
+          console.error('销毁插屏广告失败', error)
+        }
+      }
+    }
+  }, [])
+
+  // 在分析开始时显示插屏广告（仅在广告位 ID 已配置时）
+  useEffect(() => {
+    if (isInterstitialAdEnabled && analyzing && !adShownRef.current && interstitialAdRef.current) {
+      // 延迟一下显示，确保加载动画已经显示
+      const timer = setTimeout(() => {
+        try {
+          interstitialAdRef.current
+            .show()
+            .then(() => {
+              console.log('插屏广告显示成功')
+              adShownRef.current = true
+            })
+            .catch((err: any) => {
+              console.error('插屏广告显示失败', err)
+              // 如果显示失败（比如广告未准备好），不标记为已显示，允许下次再试
+            })
+        } catch (error) {
+          console.error('显示插屏广告异常', error)
+        }
+      }, 500) // 延迟 500ms 显示，让加载动画先出现
+
+      return () => {
+        clearTimeout(timer)
+      }
+    }
+  }, [analyzing])
 
   // 调试：打印结果数据
   if (result && !analyzing) {
@@ -71,18 +168,7 @@ export default function AnalysisModal({
           </View>
           <Text className="loading-text">正在分析您的愿望...</Text>
           <Text className="loading-subtext">心诚则灵，请稍候</Text>
-          {/* 贴片广告 - 广告位 ID 在 config/dev.js 或 config/prod.js 中配置 */}
-          {typeof INTERSTITIAL_AD_UNIT_ID !== 'undefined' &&
-            INTERSTITIAL_AD_UNIT_ID !== 'adunit-xxxxxxxxxxxxxxxx' && (
-              <View className="interstitial-ad-container">
-                <ad
-                  unit-id={INTERSTITIAL_AD_UNIT_ID}
-                  type="interstitial"
-                  onLoad={() => console.log('贴片广告加载成功')}
-                  onError={(e) => console.error('贴片广告加载失败', e)}
-                />
-              </View>
-            )}
+          {/* 插屏广告通过 API 方式显示，不在此处渲染组件 */}
         </View>
       )}
 

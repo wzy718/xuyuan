@@ -17,6 +17,20 @@ const DEFAULT_WISH_TEXTS = [
   '赐我一段美好的姻缘吧，对方要对我好，身材也要好，钱也赚的多'
 ]
 
+// 分享标题文案（随机显示）
+const SHARE_TITLES = [
+  '快来测测你的愿望能不能实现🎯',
+  '愿望没实现？可能是这些原因🔍',
+  '分享一个超准的愿望分析工具🌟',
+  '测了个我许的愿望，结果惊呆了😳'
+]
+
+// 随机获取分享标题
+const getRandomShareTitle = () => {
+  const randomIndex = Math.floor(Math.random() * SHARE_TITLES.length)
+  return SHARE_TITLES[randomIndex]
+}
+
 type LastAnalysisCache = {
   wish_text: string
   deity: string
@@ -122,7 +136,7 @@ export default function Index() {
       
       // 调用登录接口（手机号授权改为可选，在云函数中处理）
       console.log('正在调用登录接口...')
-      const response = await authAPI.login(userInfoRes.userInfo, null)
+      const response = await authAPI.login(userInfoRes.userInfo, undefined)
       console.log('登录接口响应:', response)
       
       if (response.code === 0) {
@@ -153,8 +167,7 @@ export default function Index() {
 
   useEffect(() => {
     Taro.showShareMenu({
-      withShareTicket: true,
-      menus: ['shareAppMessage', 'shareTimeline']
+      withShareTicket: true
     })
   }, [])
 
@@ -327,12 +340,12 @@ export default function Index() {
   useDidShow(() => {
     console.log('页面显示，检查分享链接参数...', router.params)
 
-    // 1) 处理 URL 参数（从分享链接打开/点击“查看分享页”）
+    // 1) 处理 URL 参数（从分享链接打开/点击"查看分享页"）
     const params = router.params || {}
     if (params.analysis_id && params.unlock_token) {
       console.log('检测到分享链接参数，准备解锁...', params)
       setTimeout(() => {
-        handleShareUnlock(params.analysis_id, params.unlock_token)
+        handleShareUnlock(String(params.analysis_id), String(params.unlock_token))
       }, 300)
     }
 
@@ -343,6 +356,26 @@ export default function Index() {
       setTimeout(() => {
         handleShareUnlock(shareUnlock.analysis_id, shareUnlock.unlock_token)
       }, 300)
+    }
+
+    // 3) 处理待执行的分享解锁（备用机制：防止分享成功回调未执行）
+    const pendingShareUnlock = Taro.getStorageSync('bb_pending_share_unlock')
+    if (pendingShareUnlock?.analysis_id && pendingShareUnlock?.unlock_token) {
+      // 检查是否在 5 分钟内（防止过期数据）
+      const timeDiff = Date.now() - (pendingShareUnlock.timestamp || 0)
+      if (timeDiff < 5 * 60 * 1000) {
+        console.log('[分享] 检测到待执行的分享解锁（备用机制），准备执行...', pendingShareUnlock)
+        // 延迟执行，避免与分享成功回调冲突
+        setTimeout(() => {
+          handleShareUnlock(pendingShareUnlock.analysis_id, pendingShareUnlock.unlock_token)
+          // 执行后清除，避免重复执行
+          Taro.removeStorageSync('bb_pending_share_unlock')
+        }, 1000)
+      } else {
+        // 超过 5 分钟，清除过期数据
+        console.log('[分享] 待执行的分享解锁已过期，清除...')
+        Taro.removeStorageSync('bb_pending_share_unlock')
+      }
     }
 
     // 检查预填充数据
@@ -390,7 +423,7 @@ export default function Index() {
       if (params.analysis_id && params.unlock_token) {
         console.log('登录状态变化，检测到 URL 中的分享解锁参数，执行解锁...', params)
         setTimeout(() => {
-          handleShareUnlock(params.analysis_id, params.unlock_token)
+          handleShareUnlock(String(params.analysis_id), String(params.unlock_token))
         }, 300)
       }
     }
@@ -407,76 +440,151 @@ export default function Index() {
       sharePath = `/pages/index/index?analysis_id=${analysisResult.analysis_id}&unlock_token=${analysisResult.unlock_token}`
     }
     
+    console.log('[分享] 构建分享路径:', sharePath, { ctx, analysisResult: analysisResult?.analysis_id, unlocked })
+    
     return {
-      title: '拜拜：愿望分析助手',
+      title: getRandomShareTitle(), // 随机显示分享标题
       path: sharePath,
-      success: async () => {
+      imageUrl: '/assets/share-cover.jpg', // 分享封面图(需要准备 5:4 比例的图片)
+      success: async (res: any) => {
+        console.log('[分享] 分享成功回调触发', res)
+        
         const currentCtx =
           shareUnlockContextRef.current ||
           shareUnlockContext ||
           (analysisResult?.analysis_id && analysisResult.unlock_token && !unlocked
             ? { analysisId: analysisResult.analysis_id, unlockToken: analysisResult.unlock_token }
             : null)
-        if (!currentCtx) return
-        console.log('分享成功，开始执行解锁...', currentCtx)
+        
+        console.log('[分享] 当前解锁上下文:', currentCtx, {
+          shareUnlockContextRef: shareUnlockContextRef.current,
+          shareUnlockContext,
+          analysisResult: analysisResult?.analysis_id,
+          unlocked
+        })
+        
+        if (!currentCtx) {
+          console.warn('[分享] 缺少解锁上下文，无法执行解锁')
+          return
+        }
+        
+        console.log('[分享] 开始执行解锁...', currentCtx)
 
         // 秒刷新：先乐观更新 UI（若 analyze 阶段已带 full_result，可立即展示）
+        console.log('[分享] 乐观更新 UI 状态')
         setUnlocked(true)
         setShowModal(true)
-        setAnalysisResult((prev) => {
-          if (!prev) return prev
-          const nextResult: AnalysisResult = {
-            ...prev,
-            locked: false
-          }
-          writeLastAnalysisCache({
-            wish_text: wishText,
-            deity: prefillDeity,
-            analysis_result: nextResult,
-            unlocked: true,
-            modal_visible: true
+        
+        // 确保 analysisResult 存在才更新
+        if (analysisResult) {
+          setAnalysisResult((prev) => {
+            if (!prev) return prev
+            console.log('[分享] 更新分析结果状态（乐观更新）')
+            const nextResult: AnalysisResult = {
+              ...prev,
+              locked: false
+            }
+            writeLastAnalysisCache({
+              wish_text: wishText,
+              deity: prefillDeity,
+              analysis_result: nextResult,
+              unlocked: true,
+              modal_visible: true
+            })
+            return nextResult
           })
-          return nextResult
-        })
+        } else {
+          console.warn('[分享] analysisResult 为空，无法乐观更新')
+        }
 
         // 分享成功后执行解锁同步（用于服务端记录/幂等）
         try {
+          console.log('[分享] 调用解锁接口...', {
+            unlockToken: currentCtx.unlockToken,
+            analysisId: currentCtx.analysisId
+          })
+          
           const response = await unlockAPI.unlockByShare(
             currentCtx.unlockToken,
             currentCtx.analysisId
           )
+          
+          console.log('[分享] 解锁接口响应:', response)
+          
           if (response.code === 0) {
-            setAnalysisResult((prev) => {
-              if (!prev) return prev
-              const nextResult: AnalysisResult = {
-                ...prev,
-                locked: false,
-                full_result: response.data.full_result || prev.full_result,
-                analysis_results: response.data.analysis_results || prev.analysis_results,
-                suggested_deity: response.data.suggested_deity || prev.suggested_deity
-              }
-              writeLastAnalysisCache({
-                wish_text: wishText,
-                deity: prefillDeity,
-                analysis_result: nextResult,
-                unlocked: true,
-                modal_visible: true
+            console.log('[分享] 解锁成功，更新完整结果')
+            
+            // 如果 analysisResult 为空，需要从缓存恢复或重新构建
+            const prevResult = analysisResult || readLastAnalysisCache()?.analysis_result
+            
+            if (prevResult) {
+              setAnalysisResult((prev) => {
+                const current = prev || prevResult
+                const nextResult: AnalysisResult = {
+                  ...current,
+                  locked: false,
+                  full_result: response.data?.full_result || current.full_result,
+                  analysis_results: response.data?.analysis_results || current.analysis_results,
+                  suggested_deity: response.data?.suggested_deity || current.suggested_deity
+                }
+                writeLastAnalysisCache({
+                  wish_text: wishText,
+                  deity: prefillDeity,
+                  analysis_result: nextResult,
+                  unlocked: true,
+                  modal_visible: true
+                })
+                return nextResult
               })
-              return nextResult
-            })
-            // 解锁完成后清理分享上下文，避免后续“查看分享页”继续带旧参数
+            } else {
+              // 如果完全没有结果，尝试从服务端数据构建
+              console.warn('[分享] 无法找到分析结果，尝试从服务端数据构建')
+              if (response.data) {
+                const newResult: AnalysisResult = {
+                  analysis_id: currentCtx.analysisId,
+                  analysis_results: response.data.analysis_results || [],
+                  suggested_deity: response.data.suggested_deity || '',
+                  case: response.data.case || '',
+                  posture: response.data.posture || '',
+                  locked: false,
+                  unlock_token: currentCtx.unlockToken,
+                  unlock_token_expires_at: response.data.unlock_token_expires_at || Date.now(),
+                  full_result: response.data.full_result || null
+                }
+                setAnalysisResult(newResult)
+                writeLastAnalysisCache({
+                  wish_text: wishText,
+                  deity: prefillDeity,
+                  analysis_result: newResult,
+                  unlocked: true,
+                  modal_visible: true
+                })
+              }
+            }
+            
+            // 解锁完成后清理分享上下文，避免后续"查看分享页"继续带旧参数
             shareUnlockContextRef.current = null
             setShareUnlockContext(null)
+            
+            // 清除待执行的分享解锁标记（备用机制）
+            Taro.removeStorageSync('bb_pending_share_unlock')
+            
             // 确保弹窗打开，显示解锁后的内容
+            console.log('[分享] 确保弹窗打开')
             setShowModal(true)
+            setUnlocked(true)
+            
+            // 延迟显示提示，避免与微信系统提示冲突
             setTimeout(() => {
+              console.log('[分享] 显示解锁成功提示')
               Taro.showToast({ 
                 title: '分享成功，内容已解锁', 
                 icon: 'success',
                 duration: 2000
               })
-            }, 500)
+            }, 800)
           } else {
+            console.error('[分享] 解锁失败:', response.msg)
             Taro.showToast({ 
               title: response.msg || '解锁同步失败，请稍后再试', 
               icon: 'none',
@@ -484,7 +592,7 @@ export default function Index() {
             })
           }
         } catch (error: any) {
-          console.error('分享后解锁失败:', error)
+          console.error('[分享] 解锁异常:', error)
           Taro.showToast({ 
             title: error.message || '解锁同步失败，请稍后再试', 
             icon: 'none',
@@ -492,9 +600,9 @@ export default function Index() {
           })
         }
       },
-      fail: () => {
+      fail: (err: any) => {
         // 分享失败时清除上下文
-        console.log('分享失败，清除解锁上下文')
+        console.log('[分享] 分享失败，清除解锁上下文', err)
         shareUnlockContextRef.current = null
         setShareUnlockContext(null)
       }
@@ -660,6 +768,16 @@ export default function Index() {
     }
     shareUnlockContextRef.current = ctx
     setShareUnlockContext(ctx)
+    
+    // 备用机制：将解锁信息保存到 storage，防止分享成功回调未执行
+    // 在页面显示时会检查并执行解锁
+    Taro.setStorageSync('bb_pending_share_unlock', {
+      analysis_id: analysisResult.analysis_id,
+      unlock_token: analysisResult.unlock_token,
+      timestamp: Date.now()
+    })
+    console.log('[分享] 保存待解锁信息到 storage:', ctx)
+    
     // 注意：解锁逻辑在分享成功的 success 回调中执行
   }
 

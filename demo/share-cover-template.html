@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拜拜小程序 - 分享封面图设计</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .instructions {
+      max-width: 800px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .instructions h1 {
+      margin-top: 0;
+      color: #333;
+    }
+
+    .instructions p {
+      line-height: 1.6;
+      color: #666;
+    }
+
+    .instructions code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Consolas', monospace;
+    }
+
+    /* 分享封面容器 */
+    .share-cover-container {
+      position: relative;
+    }
+
+    /* 分享封面画布 - 5:4 比例 */
+    .share-cover {
+      width: 500px;
+      height: 400px;
+      background: linear-gradient(135deg, #d4af37 0%, #c9302c 100%);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 背景装饰 - 祥云 */
+    .cloud-decoration {
+      position: absolute;
+      opacity: 0.15;
+      color: white;
+      font-size: 120px;
+    }
+
+    .cloud-1 {
+      top: 20px;
+      left: 30px;
+    }
+
+    .cloud-2 {
+      bottom: 30px;
+      right: 40px;
+      font-size: 100px;
+    }
+
+    /* 主内容区 */
+    .content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      color: white;
+      padding: 40px;
+    }
+
+    /* 莲花图标 */
+    .lotus-icon {
+      font-size: 80px;
+      margin-bottom: 20px;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0px);
+      }
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+
+    /* 主标题 */
+    .main-title {
+      font-size: 42px;
+      font-weight: bold;
+      margin: 0 0 15px 0;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      letter-spacing: 4px;
+    }
+
+    /* 副标题 */
+    .subtitle {
+      font-size: 22px;
+      margin: 0;
+      opacity: 0.95;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      letter-spacing: 2px;
+    }
+
+    /* 装饰线 */
+    .divider {
+      width: 200px;
+      height: 2px;
+      background: rgba(255,255,255,0.5);
+      margin: 20px auto;
+      position: relative;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '◆';
+      position: absolute;
+      top: -8px;
+      color: white;
+      font-size: 16px;
+    }
+
+    .divider::before {
+      left: -20px;
+    }
+
+    .divider::after {
+      right: -20px;
+    }
+
+    /* 下载按钮 */
+    .download-btn {
+      margin-top: 20px;
+      padding: 12px 32px;
+      background: #d4af37;
+      color: white;
+      border: none;
+      border-radius: 24px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      transition: all 0.3s ease;
+    }
+
+    .download-btn:hover {
+      background: #c9a02f;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    }
+
+    .download-btn:active {
+      transform: translateY(0);
+    }
+
+    /* 设计变体 */
+    .variants {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 1200px;
+    }
+
+    .variant {
+      position: relative;
+    }
+
+    .variant-label {
+      text-align: center;
+      margin-top: 10px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    /* 变体2: 蓝紫渐变 */
+    .share-cover.variant-2 {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    /* 变体3: 红金渐变 */
+    .share-cover.variant-3 {
+      background: linear-gradient(135deg, #c9302c 0%, #d4af37 100%);
+    }
+
+    /* 缩小版本用于展示多个变体 */
+    .share-cover.small {
+      width: 350px;
+      height: 280px;
+    }
+
+    .small .lotus-icon {
+      font-size: 60px;
+    }
+
+    .small .main-title {
+      font-size: 32px;
+    }
+
+    .small .subtitle {
+      font-size: 18px;
+    }
+
+    .small .cloud-decoration {
+      font-size: 80px;
+    }
+
+    .small .cloud-2 {
+      font-size: 70px;
+    }
+  </style>
+</head>
+<body>
+  <div class="instructions">
+    <h1>📱 拜拜小程序 - 分享封面图设计模板</h1>
+    <p>
+      <strong>使用说明：</strong>
+    </p>
+    <ol>
+      <li>选择下方你喜欢的设计变体</li>
+      <li>点击"下载为图片"按钮（需要使用浏览器的截图功能或第三方工具）</li>
+      <li>将图片保存为 <code>share-cover.jpg</code></li>
+      <li>放置到 <code>frontend/src/assets/</code> 目录</li>
+      <li>确保图片大小小于 128KB（可使用在线压缩工具：<a href="https://tinypng.com/" target="_blank">TinyPNG</a>）</li>
+    </ol>
+    <p>
+      <strong>推荐工具：</strong>
+    </p>
+    <ul>
+      <li><strong>截图工具</strong>：使用浏览器开发者工具（F12）→ 右键元素 → "Capture node screenshot"</li>
+      <li><strong>在线设计</strong>：<a href="https://www.canva.cn/" target="_blank">Canva</a>、<a href="https://www.chuangkit.com/" target="_blank">创客贴</a></li>
+      <li><strong>图片压缩</strong>：<a href="https://tinypng.com/" target="_blank">TinyPNG</a>、<a href="https://squoosh.app/" target="_blank">Squoosh</a></li>
+    </ul>
+  </div>
+
+  <h2 style="color: #333; margin-top: 40px;">设计变体 1：金红渐变（推荐）</h2>
+  <div class="share-cover-container">
+    <div class="share-cover" id="cover-1">
+      <div class="cloud-decoration cloud-1">☁️</div>
+      <div class="cloud-decoration cloud-2">☁️</div>
+      <div class="content">
+        <div class="lotus-icon">🪷</div>
+        <h1 class="main-title">拜拜</h1>
+        <div class="divider"></div>
+        <p class="subtitle">AI愿望分析助手</p>
+      </div>
+    </div>
+    <button class="download-btn" onclick="downloadCover('cover-1', 'share-cover-v1.png')">
+      下载为图片
+    </button>
+  </div>
+
+  <h2 style="color: #333; margin-top: 60px;">其他设计变体</h2>
+  <div class="variants">
+    <div class="variant">
+      <div class="share-cover small variant-2" id="cover-2">
+        <div class="cloud-decoration cloud-1">☁️</div>
+        <div class="cloud-decoration cloud-2">☁️</div>
+        <div class="content">
+          <div class="lotus-icon">🪷</div>
+          <h1 class="main-title">拜拜</h1>
+          <div class="divider"></div>
+          <p class="subtitle">AI愿望分析助手</p>
+        </div>
+      </div>
+      <div class="variant-label">变体2: 蓝紫渐变</div>
+      <button class="download-btn" onclick="downloadCover('cover-2', 'share-cover-v2.png')">
+        下载
+      </button>
+    </div>
+
+    <div class="variant">
+      <div class="share-cover small variant-3" id="cover-3">
+        <div class="cloud-decoration cloud-1">☁️</div>
+        <div class="cloud-decoration cloud-2">☁️</div>
+        <div class="content">
+          <div class="lotus-icon">🪷</div>
+          <h1 class="main-title">拜拜</h1>
+          <div class="divider"></div>
+          <p class="subtitle">AI愿望分析助手</p>
+        </div>
+      </div>
+      <div class="variant-label">变体3: 红金渐变</div>
+      <button class="download-btn" onclick="downloadCover('cover-3', 'share-cover-v3.png')">
+        下载
+      </button>
+    </div>
+  </div>
+
+  <div class="instructions" style="margin-top: 60px;">
+    <h2>💡 如何使用浏览器截图功能</h2>
+    <h3>Chrome / Edge:</h3>
+    <ol>
+      <li>按 F12 打开开发者工具</li>
+      <li>按 Ctrl+Shift+P (Mac: Cmd+Shift+P) 打开命令面板</li>
+      <li>输入 "Capture node screenshot"</li>
+      <li>点击要截图的元素（.share-cover）</li>
+      <li>图片会自动下载</li>
+    </ol>
+    <h3>Firefox:</h3>
+    <ol>
+      <li>按 F12 打开开发者工具</li>
+      <li>右键点击 .share-cover 元素</li>
+      <li>选择 "Screenshot Node"</li>
+    </ol>
+    <h3>或者使用在线工具:</h3>
+    <p>
+      如果你不想使用浏览器截图，可以使用 <a href="https://www.canva.cn/" target="_blank">Canva</a> 等在线设计工具，
+      参考上面的设计，创建一个 500×400 的图片。
+    </p>
+  </div>
+
+  <script>
+    // 注意：这个下载功能需要额外的库（如 html2canvas）才能工作
+    // 这里只是一个占位函数，实际使用时建议使用浏览器的截图功能
+    function downloadCover(elementId, filename) {
+      alert('请使用浏览器的截图功能：\n\n1. 按 F12 打开开发者工具\n2. 按 Ctrl+Shift+P 打开命令面板\n3. 输入 "Capture node screenshot"\n4. 点击要截图的元素\n\n或者使用在线设计工具（Canva、创客贴等）根据上面的设计创建图片。');
+    }
+  </script>
+</body>
+</html>
