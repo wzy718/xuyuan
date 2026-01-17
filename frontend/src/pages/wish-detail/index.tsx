@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 import { todoAPI } from '../../utils/api'
+import { formatDateTime } from '../../utils/format'
 import type { Wish } from '../../types'
 import WishEditorModal from '../../components/WishEditorModal'
 import './index.scss'
@@ -37,9 +38,16 @@ export default function WishDetail() {
   }, [])
 
   useShareAppMessage(() => {
+    if (!wish) {
+      return {
+        title: '快来看看我实现的愿望！',
+        path: '/pages/index/index'
+      }
+    }
     return {
-      title: `拜拜：${wish?.wish_text || '愿望分享'}`,
-      path: '/pages/index/index'
+      title: '快来看看我实现的愿望！',
+      imageUrl: '', // 可选：分享图片
+      path: `/pages/wish-detail/index?id=${wish.id}`
     }
   })
 
@@ -156,12 +164,12 @@ export default function WishDetail() {
           <Text className="bb-card-title">时间记录</Text>
           <View className="wish-detail__element">
             <Text className="wish-detail__label">许愿时间</Text>
-            <Text className="wish-detail__value">{wish.created_at || '—'}</Text>
+            <Text className="wish-detail__value">{formatDateTime(wish.created_at)}</Text>
           </View>
           {wish.status === 1 ? (
             <View className="wish-detail__element">
               <Text className="wish-detail__label">达成时间</Text>
-              <Text className="wish-detail__value">{wish.updated_at || '—'}</Text>
+              <Text className="wish-detail__value">{formatDateTime(wish.updated_at)}</Text>
             </View>
           ) : (
             <View className="wish-detail__element">
