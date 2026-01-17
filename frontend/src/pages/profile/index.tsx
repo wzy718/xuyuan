@@ -106,7 +106,7 @@ export default function Profile() {
       <View className="bb-section">
         <View className="bb-card">
           <Text className="bb-muted">
-            免责声明：本产品仅提供表达与流程建议，不承诺/保证任何超自然结果；代许愿为服务行为，提供过程记录，不承诺结果。
+            免责声明：本产品仅提供表达与流程建议，不承诺/保证任何超自然结果。
           </Text>
         </View>
       </View>

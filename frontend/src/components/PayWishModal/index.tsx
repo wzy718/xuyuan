@@ -75,7 +75,6 @@ export default function PayWishModal({ open, wish, onClose, onPay }: PayWishModa
             暂不需要
           </Button>
         </View>
-        <Text className="pay-modal__hint">免责声明：代许愿为服务行为，提供过程记录，不承诺结果。</Text>
       </View>
     </View>
   )
