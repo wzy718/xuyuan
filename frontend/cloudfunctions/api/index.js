@@ -72,6 +72,42 @@ function normalizeAnalysisResults(input) {
   return uniq;
 }
 
+function filterGapOnlyAnalysisResults(items) {
+  const arr = Array.isArray(items) ? items : [];
+  if (arr.length === 1 && arr[0] === QUALIFIED_ANALYSIS_RESULT) return arr;
+
+  const hardGapMarkers = [
+    '缺',
+    '缺少',
+    '不足',
+    '不清晰',
+    '不明确',
+    '未',
+    '没有',
+    '需补充',
+    '需要补充',
+    '不可验证',
+    '不合规',
+    '风险',
+    '模糊',
+    '太泛',
+    '过于笼统',
+    '建议补充'
+  ];
+  const softGapMarkers = ['补充', '完善'];
+  const passMarkers = ['已', '已经', '完成', '齐全', '明确', '符合', '完整', '清晰', '达标', '良好', '没问题'];
+  return arr.filter((item) => {
+    const text = ensureString(item).trim();
+    if (!text) return false;
+    if (text === QUALIFIED_ANALYSIS_RESULT) return true;
+    if (hardGapMarkers.some((marker) => text.includes(marker))) return true;
+    if (!softGapMarkers.some((marker) => text.includes(marker))) return false;
+    // “补充/完善”类表述若带明显通过项语气，则视为噪音并过滤掉
+    if (passMarkers.some((marker) => text.includes(marker))) return false;
+    return true;
+  });
+}
+
 function getLLMConfig() {
   const provider = (LLM_PROVIDER || 'auto').toLowerCase();
 
@@ -384,73 +420,6 @@ function generateUnlockToken() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-/**
- * 快速分析愿望（用于首页弹窗展示）
- * 返回：analysis_results、case、posture
- * 特点：prompt 简洁，响应快速
- */
-async function quickAnalyzeWish(wishText, deity = '') {
-  const systemPrompt = `你是愿望分析师。请基于用户输入，输出严格 JSON（不要 markdown、不要代码块、不要额外解释）：
-{"analysis_results":["原因和后果1"],"case":"戏剧化失败案例或正向建议","posture":"关键改法","suggested_deity":"建议许愿对象"}
-
-评价标准（6个要素）：
-1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
-2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer等）
-3. 方式与边界：是否包含合法合规、不伤害他人等表述
-4. 行动承诺：是否包含“我会/我愿意/每天”等行动表述
-5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
-6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
-
-输出要求：
-1. analysis_results：输出 0-6 条“可能导致许愿失败的原因和后果”（数组），每条 18 字内。
-   - 必须逐条对照上面 6 条评价标准：每缺 1 条标准，最多输出 1 条原因和后果（要点名对应标准），最多 6 条。
-   - 若 6 条标准均满足，则返回：["${QUALIFIED_ANALYSIS_RESULT}"]。
-2. case：
-   - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
-   - 否则 case 必须是“戏剧化失败案例”，要贴合用户不规范的描述，并与 analysis_results 强相关，20-100 字。
-3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
-4. suggested_deity：结合愿望内容给出“建议许愿对象”。
-   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
-   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
-5. 禁止违法违规、伤害他人、诈骗赌博等；不要编造任何身份证号码（仅使用“使用占位符”提示）。`;
-
-  const userPrompt = `${deity ? deity + '：' : ''}${wishText}`;
-  const llmRes = await callChatCompletion({
-    systemPrompt,
-    userPrompt,
-    temperature: 0.2,
-    maxTokens: 450,
-    timeoutMs: 13000
-  });
-  const content = llmRes?.content || '';
-
-  try {
-    const parsed = extractJsonFromText(content) || JSON.parse(content);
-    const analysisResults = normalizeAnalysisResults(parsed?.analysis_results);
-    const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
-    const caseText = ensureString(parsed?.case || '').trim() || (isQualified ? QUALIFIED_CASE_TEXT : '');
-    const posture = ensureString(parsed?.posture || '').trim() || (isQualified ? '保持行动承诺并定期复盘' : '先补齐时间与量化目标');
-    const suggestedDeity = ensureString(parsed?.suggested_deity || '').trim() || deity;
-
-    const result = {
-      analysis_results: analysisResults.length > 0 ? analysisResults : [QUALIFIED_ANALYSIS_RESULT],
-      case: caseText || '小王许愿“想暴富”，没写时间和方式，结果中了张5元刮刮乐还以为“显灵”，转头继续躺平，年底还是月光。',
-      posture,
-      suggested_deity: suggestedDeity
-    };
-
-    console.log('quickAnalyzeWish - result:', JSON.stringify(result, null, 2));
-    return result;
-  } catch (error) {
-    console.error('quickAnalyzeWish - parse error:', error, 'content:', content);
-    return {
-      analysis_results: ['缺时间边界，易拖延', '缺量化目标，易自嗨'],
-      case: '小李许愿“要上985”，没说哪所也没写分数，结果打车来辆尾号985，激动到忘了复习，期末照旧。',
-      posture: '先补齐时间+量化目标',
-      suggested_deity: deity
-    };
-  }
-}
 
 /**
  * 完整分析愿望（解锁后使用）
@@ -479,15 +448,14 @@ async function fullAnalyzeWish(wishText, deity = '', profile = {}, options = {})
 2. optimized_text 80-160字
 3. steps 3-5条
 4. warnings 0-3条（可为空数组）
-5. 必须包含“许愿人：姓名（身份证号：使用占位符）”，不要编造任何身份证号码
+5. 必须包含“许愿人：姓名（身份证号：占位符）”，不要编造任何身份证号码
 6. suggested_deity：
-   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
-   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
-
+   - 若用户未明确“deity”，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+   - 若用户已明确“deity”，根据愿望类型判断是否合理，如果合理则输出该对象，如果不合理则输出建议对象。（例：用户向“文殊”求升职加薪，不合理，则建议许愿对象输出“财神”）
 7. 所有内容避免违法违规、伤害他人、诈骗赌博等，并包含“合法合规、不伤害他人”等边界表述`;
 
   const userPrompt = `优化愿望：
-${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
+${deity ? `对象：${deity}（请判断该对象是否合理，如不合理请给出建议对象）\n` : ''}${profile.name ? `称呼：${profile.name}\n` : ''}${
     profile.city ? `城市：${profile.city}\n` : ''
   }愿望：${wishText}`;
 
@@ -526,7 +494,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile.name ? `称呼：${profile.name}\
  * 目标：减少网络往返，避免云函数 20s 同步调用时限导致的超时
  */
 async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
-  const systemPrompt = `你是“愿望分析与优化师”。请基于用户输入，输出严格 JSON（不要 markdown，不要代码块、不要额外解释），结构如下：
+  const systemPrompt = `你是“愿望分析与优化师（诊断只报缺口，不报通过项）”。请基于用户输入，输出严格 JSON（不要 markdown，不要代码块、不要额外解释），结构如下：
 {
   "analysis_results": ["原因和后果1","原因和后果2"],
   "case": "戏剧化失败案例或正向建议",
@@ -550,23 +518,26 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
 
 评价标准（6个要素）：
 1. 时间边界：是否包含明确时间（如“3个月内”“2026年内”等）
-2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer等）
+2. 可验证的量化目标：是否包含数字和单位（金额、分数、名次、offer、/月、/年等）
 3. 方式与边界：是否包含合法合规、不伤害他人等表述
 4. 行动承诺：是否包含“我会/我愿意/每天”等行动表述
 5. 还愿/回向：是否包含还愿、回向、布施等表述（可选，但有助于形成闭环）
 6. 明确的许愿人：是否包含明确许愿人的名字和身份证号，而不是仅仅写“我”
 
 输出要求：
-1. analysis_results：输出 0-6 条“可能导致许愿失败的原因和后果”（数组），每条 18 字内。
-   - 必须逐条对照上面 6 条评价标准：每缺 1 条标准，最多输出 1 条原因和后果（要点名对应标准），最多 6 条。
-   - 若 6 条标准均满足，则返回：["${QUALIFIED_ANALYSIS_RESULT}"]。
+1. analysis_results：只输出 0-6 条“未满足/缺失”的点（数组），每条 30 字内。
+   - 必须逐条对照上面 6 条评价标准：每缺 1 条标准，最多输出 1 条原因和后果（不要泄露评价标准名称），最多 6 条。
+   - 有包含或者大致符合的不需要输出。
+   - 例：用户许愿“今年要暴富”，有包含“时间边界”，则不需要输出“时间边界“，没有包含”具体数字“则输出”缺少可量化目标，财神不知道该帮你实现多少“，没有包含”方式与边界“则输出”方式不明确，财神可能通过你不希望的方式帮你实现“。
+   - 若某要素已基本满足，analysis_results 中不需要输出，不得以任何形式出现该要素的“正向结论”（包括但不限于“明确/符合/完整/清晰”等表述）。
+   - 若 6 条标准均满足，允许且只允许返回：["${QUALIFIED_ANALYSIS_RESULT}"]（除此之外不要再输出任何“通过项”）。
 2. case：
    - 若 6 条标准均满足，则 case 返回：“${QUALIFIED_CASE_TEXT}”。
-   - 否则 case 必须是“戏剧化失败案例，有梗有趣有传播性”，要贴合用户不规范的描述，并且与 analysis_results 强相关，包含“人物+许愿内容+误解/偏差+戏剧化结果”，20-100字。
+   - 否则 case 必须是“戏剧化失败案例，有梗有趣有传播性”，要贴合用户不规范的描述，并且与 analysis_results 强相关，包含“人物+不规范许愿内容+神仙佛祖误解/偏差+戏剧化结果”，20-100字。
 3. posture：30字内，给出最关键的改法（围绕 analysis_results 的首要问题）。
 4. suggested_deity：
-   - 若用户已明确“对象”，优先沿用该对象，但要判断是否合理，如果不合理则给出建议。
-   - 若用户未明确对象，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+   - 若用户未明确“deity”，再根据愿望类型给出建议（例如：学业→文殊菩萨；犯太岁→太岁；姻缘→月老；财富→财神）
+   - 若用户已明确“deity”，根据愿望类型判断是否合理，如果合理则输出该对象，如果不合理则输出建议对象。（例：用户向“文殊”求升职加薪，不合理建议许愿对象输出“财神”）
 5. full_result：
    - optimized_text：80-160字，完整、可直接复制的许愿稿，必须补齐缺失要素（时间、量化、边界、行动、还愿、许愿人信息等；还愿可选但建议加）
    - structured_suggestion：把 6 要素拆到对应字段（缺啥补啥）
@@ -575,7 +546,7 @@ async function combinedAnalyzeWish(wishText, deity = '', profile = {}) {
 6. 所有内容避免违法违规、伤害他人、诈骗赌博等，且不要编造任何身份证号码（仅使用占位符提示，如：许愿人：张三（身份证号：使用占位符））。`;
 
   const userPrompt = `请分析并优化以下愿望：
-${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
+${deity ? `对象：${deity}（请判断该对象是否合理，如不合理请给出建议对象）\n` : ''}${profile?.name ? `称呼：${profile.name}\n` : ''}${profile?.city ? `城市：${profile.city}\n` : ''}愿望：${wishText}`;
 
   const llmRes = await callChatCompletion({
     systemPrompt,
@@ -592,7 +563,7 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
     throw new Error('模型输出解析失败');
   }
 
-  const analysisResults = normalizeAnalysisResults(parsed?.analysis_results);
+  const analysisResults = filterGapOnlyAnalysisResults(normalizeAnalysisResults(parsed?.analysis_results));
   const isQualified = analysisResults.length === 1 && analysisResults[0] === QUALIFIED_ANALYSIS_RESULT;
   const suggestedDeityFinal = ensureString(parsed?.suggested_deity || '').trim() || deity;
 
@@ -627,23 +598,6 @@ ${deity ? `对象：${deity}\n` : ''}${profile?.name ? `称呼：${profile.name}
   return { quickResult, fullResult, llm: llmRes?.llm || null };
 }
 
-// 保留旧函数兼容性
-async function analyzeWishByDeepSeek(wishText, deity = '', profile = {}) {
-  // 先做快速分析
-  const quickResult = await quickAnalyzeWish(wishText, deity);
-  // 再做完整分析
-  const fullResult = await fullAnalyzeWish(wishText, deity, profile);
-  
-  return {
-    analysis_results: quickResult.analysis_results,
-    case: quickResult.case,
-    posture: quickResult.posture,
-    optimized_text: fullResult.optimized_text,
-    structured_suggestion: fullResult.structured_suggestion,
-    steps: fullResult.steps,
-    warnings: fullResult.warnings || []
-  };
-}
 
 /**
  * 解密手机号
