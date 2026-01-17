@@ -1,5 +1,7 @@
 import { Component, PropsWithChildren } from 'react'
 import Taro from '@tarojs/taro'
+import { authAPI } from './utils/api'
+import { useAppStore } from './store'
 import './app.scss'
 
 declare const CLOUD_ENV_ID: string
@@ -23,8 +25,22 @@ class App extends Component<PropsWithChildren> {
         env: envId,
         traceUser: true
       })
+
+      // 无感登录：基于 OPENID 自动创建/恢复账号，不弹授权框
+      void this.ensureLogin()
     } else {
       console.error('⚠️ 云开发能力不可用，请确保在微信开发者工具中运行')
+    }
+  }
+
+  private async ensureLogin() {
+    try {
+      const res = await authAPI.ensure()
+      if (res.code === 0) {
+        useAppStore.getState().setUser(res.data?.user || null)
+      }
+    } catch (error) {
+      console.error('无感登录失败:', error)
     }
   }
 

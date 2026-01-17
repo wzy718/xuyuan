@@ -410,6 +410,12 @@ function isOwnedByOpenid(doc, openid) {
   return doc.owner_openid === openid || doc._openid === openid;
 }
 
+function isOwnedByUser(doc, userId, openid) {
+  if (!doc) return false;
+  if (userId && doc.owner_user_id === userId) return true;
+  return isOwnedByOpenid(doc, openid);
+}
+
 function checkSensitiveWords(text) {
   const lowerText = ensureString(text).toLowerCase();
   for (const word of SENSITIVE_WORDS) {
@@ -787,122 +793,233 @@ async function decryptPhoneNumber(encryptedData, iv, sessionKey) {
   }
 }
 
+async function normalizeUserProfile(userInfo) {
+  if (!userInfo || typeof userInfo !== 'object') return { nickname: null, avatar_url: null };
+
+  let nickname = ensureString(userInfo?.nickName).trim();
+  let avatarUrl = ensureString(userInfo?.avatarUrl).trim();
+
+  // 昵称做长度与内容安全处理（失败则不更新昵称，避免卡住登录流程）
+  if (nickname) {
+    if (nickname.length > 32) nickname = nickname.slice(0, 32);
+    const sec = await msgSecCheck(nickname);
+    if (!sec.safe) nickname = '';
+  }
+
+  // 头像 URL 仅保留常规 http(s) 链接，避免写入异常值
+  if (avatarUrl) {
+    if (avatarUrl.length > 1024) avatarUrl = '';
+    if (!/^https?:\/\//i.test(avatarUrl)) avatarUrl = '';
+  }
+
+  return {
+    nickname: nickname || null,
+    avatar_url: avatarUrl || null
+  };
+}
+
+const OWNERSHIP_COLLECTIONS = [
+  'wishes',
+  'analyses',
+  'wish_profiles',
+  'persons',
+  'person_categories',
+  'orders'
+];
+
+function toPublicUser(userDoc, userId) {
+  const nickname = ensureString(userDoc?.nickname).trim();
+  const avatarUrl = ensureString(userDoc?.avatar_url).trim();
+  const hasPhone = !!ensureString(userDoc?.phone).trim();
+
+  return {
+    id: userId,
+    ...(nickname ? { nickname } : {}),
+    ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+    has_phone: hasPhone
+  };
+}
+
+async function getUserContext(openid) {
+  const users = db.collection('users');
+  const now = nowDate();
+
+  // 先查 owner_openid（新数据），再兼容 _openid（历史数据）
+  let res = await users.where({ owner_openid: openid }).limit(1).get();
+  if (!res.data || res.data.length === 0) {
+    res = await users.where({ _openid: openid }).limit(1).get();
+  }
+
+  let selfId = res.data?.[0]?._id || '';
+  let selfDoc = res.data?.[0] || null;
+
+  if (!selfDoc) {
+    const addRes = await users.add({
+      data: {
+        owner_openid: openid,
+        nickname: null,
+        avatar_url: null,
+        phone: null,
+        merged_to_user_id: null,
+        created_at: now,
+        updated_at: now
+      }
+    });
+    selfId = addRes._id;
+    const created = await users.doc(selfId).get().catch(() => null);
+    selfDoc = created?.data ? { ...created.data, _id: selfId } : { _id: selfId, owner_openid: openid };
+  } else if (!selfDoc.owner_openid) {
+    await users.doc(selfId).update({ data: { owner_openid: openid } }).catch(() => null);
+    selfDoc.owner_openid = openid;
+  }
+
+  // 跟随合并链，得到最终的有效 user
+  let effectiveId = ensureString(selfDoc.merged_to_user_id).trim() || selfId;
+  let effectiveDoc = selfDoc;
+  for (let i = 0; i < 5; i++) {
+    const nextId = ensureString(effectiveDoc?.merged_to_user_id).trim();
+    if (!nextId) break;
+    if (nextId === effectiveId) break;
+    const next = await users.doc(nextId).get().catch(() => null);
+    if (!next?.data) break;
+    effectiveId = nextId;
+    effectiveDoc = { ...next.data, _id: nextId };
+  }
+
+  return { selfUserId: selfId, selfUserDoc: selfDoc, userId: effectiveId, userDoc: effectiveDoc };
+}
+
+async function mergeOwnership(openid, fromUserId, toUserId) {
+  if (!fromUserId || !toUserId || fromUserId === toUserId) return;
+
+  await Promise.all(
+    OWNERSHIP_COLLECTIONS.map(async (name) => {
+      const col = db.collection(name);
+      // 新字段：按 owner_user_id 迁移
+      await col.where({ owner_user_id: fromUserId }).update({ data: { owner_user_id: toUserId } }).catch(() => null);
+      // 兼容旧字段：按 openid 回填 owner_user_id
+      await col.where({ owner_openid: openid }).update({ data: { owner_user_id: toUserId } }).catch(() => null);
+      await col
+        .where({ _openid: openid })
+        .update({ data: { owner_user_id: toUserId, owner_openid: openid } })
+        .catch(() => null);
+    })
+  );
+}
+
 async function ensureUser(openid, userInfo, phoneNumber) {
   const users = db.collection('users');
   const now = nowDate();
 
-  // 云函数写库不保证一定自动写入 _openid，这里使用 owner_openid 作为显式归属字段
-  let existing = await users.where({ owner_openid: openid }).limit(1).get();
-  if (!existing.data || existing.data.length === 0) {
-    existing = await users.where({ _openid: openid }).limit(1).get();
-  }
-  if (existing.data && existing.data.length > 0) {
-    const current = existing.data[0];
-    // 兼容历史数据：若通过 _openid 找到但缺少 owner_openid，补写一次
-    if (!current.owner_openid) {
-      await users.doc(current._id).update({ data: { owner_openid: openid } }).catch(() => null);
-    }
-    const updateData = {
-      updated_at: now
-    };
-    
-    // 更新用户信息
-    if (userInfo && (userInfo.nickName || userInfo.avatarUrl)) {
-      updateData.nickname = userInfo.nickName || current.nickname || null;
-      updateData.avatar_url = userInfo.avatarUrl || current.avatar_url || null;
-    }
-    
-    // 更新手机号（如果提供了且与现有不同）
-    if (phoneNumber && phoneNumber !== current.phone) {
-      // 检查手机号是否已被其他用户使用
-      const phoneUser = await users.where({ phone: phoneNumber, _openid: _.neq(openid) }).limit(1).get();
-      if (phoneUser.data && phoneUser.data.length > 0) {
-        throw new Error('该手机号已被其他账号使用');
-      }
-      updateData.phone = phoneNumber;
-    }
-    
-    if (Object.keys(updateData).length > 1) { // 除了 updated_at 还有其他字段
-      await users.doc(current._id).update({ data: updateData });
-    }
-    
-    return { 
-      id: current._id, 
-      nickname: updateData.nickname || current.nickname, 
-      avatar_url: updateData.avatar_url || current.avatar_url,
-      phone: updateData.phone || current.phone || null
-    };
-  }
+  // 先确保 openid 对应的用户文档存在，并解析合并链
+  const ctx = await getUserContext(openid);
+  let effectiveUserId = ctx.userId;
+  let effectiveUserDoc = ctx.userDoc || {};
 
-  // 新用户注册
-  // 检查手机号是否已被使用
+  // 若提供手机号：若手机号已绑定到其他账号，则进行账号合并（以手机号账号为准）
   if (phoneNumber) {
-    const phoneUser = await users.where({ phone: phoneNumber }).limit(1).get();
-    if (phoneUser.data && phoneUser.data.length > 0) {
-      throw new Error('该手机号已被注册');
+    const phoneRes = await users.where({ phone: phoneNumber }).limit(1).get();
+    const phoneOwner = phoneRes.data?.[0] || null;
+    const phoneOwnerId = phoneOwner?._id || '';
+    if (phoneOwnerId && phoneOwnerId !== effectiveUserId) {
+      await mergeOwnership(openid, effectiveUserId, phoneOwnerId);
+      // 标记 openid 用户已合并到手机号用户
+      await users
+        .doc(ctx.selfUserId)
+        .update({ data: { merged_to_user_id: phoneOwnerId, updated_at: now } })
+        .catch(() => null);
+      effectiveUserId = phoneOwnerId;
+      effectiveUserDoc = phoneOwner;
     }
   }
 
-  const addRes = await users.add({
-    data: {
-      owner_openid: openid,
-      nickname: userInfo?.nickName || null,
-      avatar_url: userInfo?.avatarUrl || null,
-      phone: phoneNumber || null,
-      created_at: now,
-      updated_at: now
-    }
-  });
+  const updateData = { updated_at: now };
 
-  return { 
-    id: addRes._id, 
-    nickname: userInfo?.nickName || undefined, 
-    avatar_url: userInfo?.avatarUrl || undefined,
-    phone: phoneNumber || null
-  };
+  // 更新用户信息（只接受白名单字段 + 清洗）
+  const normalized = await normalizeUserProfile(userInfo);
+  if (normalized.nickname) updateData.nickname = normalized.nickname;
+  if (normalized.avatar_url) updateData.avatar_url = normalized.avatar_url;
+
+  // 更新手机号（绑定/更新）
+  if (phoneNumber && phoneNumber !== effectiveUserDoc.phone) {
+    updateData.phone = phoneNumber;
+  }
+
+  if (Object.keys(updateData).length > 1) {
+    await users.doc(effectiveUserId).update({ data: updateData }).catch(() => null);
+  }
+
+  const refreshed = await users.doc(effectiveUserId).get().catch(() => null);
+  const refreshedDoc = refreshed?.data ? { ...refreshed.data, _id: effectiveUserId } : { ...effectiveUserDoc, _id: effectiveUserId, ...updateData };
+  return toPublicUser(refreshedDoc, effectiveUserId);
 }
 
-async function enforceHourlyLimit(openid, collectionName, maxRequests) {
+async function enforceHourlyLimit(userId, openid, collectionName, maxRequests) {
   const since = new Date(Date.now() - 60 * 60 * 1000);
   const collection = db.collection(collectionName);
-  // 优先按 owner_openid 统计（新数据），若为 0 再兼容 _openid（历史数据）
+
+  // 优先按 owner_user_id 统计（支持账号合并与多端登录）
+  if (userId) {
+    const countByUser = await collection.where({ owner_user_id: userId, created_at: _.gte(since) }).count();
+    if (countByUser.total > 0) return countByUser.total < maxRequests;
+  }
+
+  // 兼容旧数据：按 owner_openid/_openid 统计
   const countByOwner = await collection.where({ owner_openid: openid, created_at: _.gte(since) }).count();
   if (countByOwner.total > 0) return countByOwner.total < maxRequests;
   const countByOpenid = await collection.where({ _openid: openid, created_at: _.gte(since) }).count();
   return countByOpenid.total < maxRequests;
 }
 
-async function handleAuthLogin(openid, data) {
-  let phoneNumber = null;
-  
-  // 解密手机号（使用 cloudID 方式）
-  if (data?.phone_cloud_id) {
+async function extractPhoneNumberFromPayload(data) {
+  const phoneCode = ensureString(data?.phone_code).trim();
+  if (phoneCode) {
     try {
-      // 使用云函数内置能力解密手机号
-      // cloudID 是前端通过 Button open-type="getPhoneNumber" 获取的
-      // 注意：cloudID 需要是完整的 cloudID 字符串
-      const result = await cloud.getOpenData({
-        list: [{
-          cloudID: data.phone_cloud_id
-        }]
-      });
-      
-      if (result && result.list && result.list.length > 0) {
-        const phoneData = result.list[0].data;
-        phoneNumber = phoneData?.phoneNumber || null;
-        console.log('手机号解密成功:', phoneNumber ? `已获取手机号: ${phoneNumber.substring(0, 3)}****${phoneNumber.substring(7)}` : '未获取');
-      } else {
-        console.warn('手机号解密结果为空');
-      }
+      const res = await cloud.openapi.phonenumber.getPhoneNumber({ code: phoneCode });
+      const phoneNumber = res?.phoneInfo?.phoneNumber || res?.phone_info?.phoneNumber || null;
+      if (phoneNumber) console.log('手机号解析成功（code）');
+      return phoneNumber;
     } catch (error) {
-      console.error('解密手机号失败:', error);
-      // 手机号解密失败不影响登录，继续使用其他信息
-      // 但记录错误以便排查
-      console.error('解密错误详情:', error.message || error);
+      console.error('手机号解析失败（code）:', error?.message || error);
     }
   }
-  
+
+  const phoneCloudID = ensureString(data?.phone_cloud_id).trim();
+  if (phoneCloudID) {
+    try {
+      const result = await cloud.getOpenData({
+        list: [
+          {
+            cloudID: phoneCloudID
+          }
+        ]
+      });
+      const phoneNumber = result?.list?.[0]?.data?.phoneNumber || null;
+      if (phoneNumber) console.log('手机号解析成功（cloudID）');
+      return phoneNumber;
+    } catch (error) {
+      console.error('手机号解析失败（cloudID）:', error?.message || error);
+    }
+  }
+
+  return null;
+}
+
+async function handleAuthLogin(openid, data) {
+  const phoneNumber = await extractPhoneNumberFromPayload(data);
   const user = await ensureUser(openid, data?.user_info, phoneNumber);
+  return ok({ user });
+}
+
+async function handleAuthEnsure(openid, data) {
+  const user = await ensureUser(openid, null, null);
+  return ok({ user });
+}
+
+async function handleAuthBindPhone(openid, data) {
+  const phoneNumber = await extractPhoneNumberFromPayload(data);
+  if (!phoneNumber) return fail('获取手机号失败');
+  const user = await ensureUser(openid, null, phoneNumber);
   return ok({ user });
 }
 
@@ -913,7 +1030,8 @@ async function handleWishAnalyze(openid, data) {
   const sec = await msgSecCheck(wishText);
   if (!sec.safe) return fail(sec.reason);
 
-  const allowed = await enforceHourlyLimit(openid, 'analyses', 20);
+  const { userId } = await getUserContext(openid);
+  const allowed = await enforceHourlyLimit(userId, openid, 'analyses', 20);
   if (!allowed) return fail('请求过于频繁，请稍后再试', -1);
 
   // 一次模型调用拿到“诊断 + 优化”，减少网络往返，尽量避免云函数 20s 超时
@@ -926,6 +1044,7 @@ async function handleWishAnalyze(openid, data) {
   const addRes = await db.collection('analyses').add({
     data: {
       owner_openid: openid,
+      owner_user_id: userId,
       wish_id: data?.wish_id || null,
       wish_text: wishText,
       deity: deity,
@@ -1056,7 +1175,8 @@ async function handleUnlock(openid, data) {
   }
 
   // 解锁频控（简化）
-  const allowed = await enforceHourlyLimit(openid, 'unlock_logs', 10);
+  const { userId } = await getUserContext(openid);
+  const allowed = await enforceHourlyLimit(userId, openid, 'unlock_logs', 10);
   if (!allowed) return fail('解锁次数过多，请稍后再试');
 
   const analysis = await findAnalysisForUnlock(openid, unlockToken);
@@ -1094,6 +1214,8 @@ async function handleUnlock(openid, data) {
 
   await db.collection('unlock_logs').add({
     data: {
+      owner_user_id: userId,
+      owner_openid: openid,
       analysis_id: analysis._id,
       created_at: nowDate()
     }
@@ -1155,10 +1277,16 @@ async function handleWishOptimize(openid, data) {
 
   if (!analysisId) return fail('缺少analysis_id（请先调用 analyze 并完成解锁）');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('analyses').doc(analysisId).get().catch(() => null);
   const analysis = doc?.data || null;
-  if (!analysis || !isOwnedByOpenid(analysis, openid)) return fail('分析记录不存在');
+  if (!analysis || !isOwnedByUser(analysis, userId, openid)) return fail('分析记录不存在');
   if (!analysis.unlocked) return fail('未解锁，无法使用一键 AI 优化', -1);
+
+  // 兼容历史数据：补写 owner_user_id
+  if (!analysis.owner_user_id && isOwnedByOpenid(analysis, openid)) {
+    await db.collection('analyses').doc(analysisId).update({ data: { owner_user_id: userId } }).catch(() => null);
+  }
 
   const sec = await msgSecCheck(wishText);
   if (!sec.safe) return fail(sec.reason);
@@ -1178,8 +1306,13 @@ async function handleTodosList(openid, data) {
   const wishes = db.collection('wishes');
   const whereBase = status !== undefined && status !== null ? { status: Number(status) } : {};
 
-  // 优先按 owner_openid 查（新数据），为空再兼容 _openid（历史数据）
-  let res = await wishes.where({ ...whereBase, owner_openid: openid }).get();
+  const { userId } = await getUserContext(openid);
+
+  // 优先按 owner_user_id 查（支持账号合并与多端登录），为空再兼容 owner_openid/_openid（历史数据）
+  let res = await wishes.where({ ...whereBase, owner_user_id: userId }).get();
+  if (!res.data || res.data.length === 0) {
+    res = await wishes.where({ ...whereBase, owner_openid: openid }).get();
+  }
   if (!res.data || res.data.length === 0) {
     res = await wishes.where({ ...whereBase, _openid: openid }).get();
   }
@@ -1190,15 +1323,23 @@ async function handleTodosList(openid, data) {
     return bt - at;
   });
 
-  // 兼容历史数据：若列表里存在缺少 owner_openid 但 _openid 匹配的记录，补写 owner_openid
-  // 避免前端后续只按 owner_openid 查询时看不到历史数据。
+  // 兼容历史数据：补写 owner_openid/owner_user_id，便于后续按 userId 查询实现多端关联
   const toBackfill = list
-    .filter((wish) => wish && !wish.owner_openid && wish._openid === openid && wish._id)
+    .filter(
+      (wish) =>
+        wish &&
+        wish._id &&
+        (!wish.owner_user_id || !wish.owner_openid) &&
+        (wish.owner_openid === openid || wish._openid === openid)
+    )
     .slice(0, 20);
   if (toBackfill.length > 0) {
     await Promise.all(
       toBackfill.map((wish) =>
-        wishes.doc(wish._id).update({ data: { owner_openid: openid } }).catch(() => null)
+        wishes
+          .doc(wish._id)
+          .update({ data: { owner_openid: openid, owner_user_id: userId } })
+          .catch(() => null)
       )
     );
   }
@@ -1212,9 +1353,11 @@ async function handleTodosCreate(openid, data) {
   const sec = await msgSecCheck(wishText);
   if (!sec.safe) return fail(sec.reason);
 
+  const { userId } = await getUserContext(openid);
   const now = nowDate();
   const wishData = {
     owner_openid: openid,
+    owner_user_id: userId,
     beneficiary_type: ensureString(data?.beneficiary_type) || null,
     beneficiary_desc: ensureString(data?.beneficiary_desc) || null,
     deity: ensureString(data?.deity) || null,
@@ -1245,9 +1388,10 @@ async function handleTodosUpdate(openid, data) {
   const updates = data?.updates || {};
   if (!wishId) return fail('缺少wish_id');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('wishes').doc(wishId).get().catch(() => null);
   const wish = doc?.data || null;
-  if (!wish || !isOwnedByOpenid(wish, openid)) return fail('愿望不存在');
+  if (!wish || !isOwnedByUser(wish, userId, openid)) return fail('愿望不存在');
 
   const nextData = {};
   const allowedFields = [
@@ -1273,6 +1417,10 @@ async function handleTodosUpdate(openid, data) {
   }
 
   await db.collection('wishes').doc(wishId).update({ data: nextData });
+  // 兼容历史数据：补写 owner_user_id
+  if (!wish.owner_user_id && isOwnedByOpenid(wish, openid)) {
+    await db.collection('wishes').doc(wishId).update({ data: { owner_user_id: userId } }).catch(() => null);
+  }
   const updated = await db.collection('wishes').doc(wishId).get();
   return ok(updated.data);
 }
@@ -1281,9 +1429,10 @@ async function handleTodosDelete(openid, data) {
   const wishId = ensureString(data?.wish_id);
   if (!wishId) return fail('缺少wish_id');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('wishes').doc(wishId).get().catch(() => null);
   const wish = doc?.data || null;
-  if (!wish || !isOwnedByOpenid(wish, openid)) return fail('愿望不存在');
+  if (!wish || !isOwnedByUser(wish, userId, openid)) return fail('愿望不存在');
 
   await db.collection('wishes').doc(wishId).remove();
   return ok({ deleted: true });
@@ -1299,9 +1448,12 @@ async function handlePaymentCreate(openid, data) {
   const wishId = data?.wish_id || null;
   const now = nowDate();
   const outTradeNo = generateOrderNo();
+  const { userId } = await getUserContext(openid);
 
   const addRes = await db.collection('orders').add({
     data: {
+      owner_openid: openid,
+      owner_user_id: userId,
       wish_id: wishId,
       amount: 100,
       status: 0,
@@ -1328,15 +1480,40 @@ async function handlePaymentCreate(openid, data) {
 
 // 许愿人/受益人和对象信息管理
 async function handleProfileList(openid, data) {
+  const { userId } = await getUserContext(openid);
   const res = await db
     .collection('wish_profiles')
-    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
+    .where(_.or([{ owner_user_id: userId }, { owner_openid: openid }, { _openid: openid }]))
     .orderBy('updated_at', 'desc')
     .get();
-  return ok(res.data || []);
+
+  const list = res.data || [];
+  // 兼容历史数据：补写 owner_openid/owner_user_id
+  const toBackfill = list
+    .filter(
+      (item) =>
+        item &&
+        item._id &&
+        (!item.owner_user_id || !item.owner_openid) &&
+        (item.owner_openid === openid || item._openid === openid)
+    )
+    .slice(0, 20);
+  if (toBackfill.length > 0) {
+    await Promise.all(
+      toBackfill.map((item) =>
+        db
+          .collection('wish_profiles')
+          .doc(item._id)
+          .update({ data: { owner_openid: openid, owner_user_id: userId } })
+          .catch(() => null)
+      )
+    );
+  }
+  return ok(list);
 }
 
 async function handleProfileCreate(openid, data) {
+  const { userId } = await getUserContext(openid);
   const beneficiaryType = ensureString(data?.beneficiary_type);
   const beneficiaryDesc = ensureString(data?.beneficiary_desc || '');
   const deity = ensureString(data?.deity || '');
@@ -1345,22 +1522,34 @@ async function handleProfileCreate(openid, data) {
   if (!deity.trim()) return fail('对象不能为空');
 
   // 检查是否已存在相同的记录
-  const existing = await db
+  let existing = await db
     .collection('wish_profiles')
     .where({
-      _openid: openid,
+      owner_user_id: userId,
       beneficiary_type: beneficiaryType,
       beneficiary_desc: beneficiaryDesc,
       deity: deity
     })
     .limit(1)
     .get();
+  if (!existing.data || existing.data.length === 0) {
+    existing = await db
+      .collection('wish_profiles')
+      .where({
+        owner_openid: openid,
+        beneficiary_type: beneficiaryType,
+        beneficiary_desc: beneficiaryDesc,
+        deity: deity
+      })
+      .limit(1)
+      .get();
+  }
 
   const now = nowDate();
   if (existing.data && existing.data.length > 0) {
     // 更新已存在记录的更新时间
     await db.collection('wish_profiles').doc(existing.data[0]._id).update({
-      data: { updated_at: now }
+      data: { updated_at: now, owner_openid: openid, owner_user_id: userId }
     });
     const updated = await db.collection('wish_profiles').doc(existing.data[0]._id).get();
     return ok(updated.data);
@@ -1370,6 +1559,7 @@ async function handleProfileCreate(openid, data) {
   const addRes = await db.collection('wish_profiles').add({
     data: {
       owner_openid: openid,
+      owner_user_id: userId,
       beneficiary_type: beneficiaryType,
       beneficiary_desc: beneficiaryDesc,
       deity: deity,
@@ -1386,9 +1576,10 @@ async function handleProfileDelete(openid, data) {
   const profileId = ensureString(data?.profile_id);
   if (!profileId) return fail('缺少profile_id');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('wish_profiles').doc(profileId).get().catch(() => null);
   const profile = doc?.data || null;
-  if (!isOwnedByOpenid(profile, openid)) return fail('记录不存在');
+  if (!isOwnedByUser(profile, userId, openid)) return fail('记录不存在');
 
   await db.collection('wish_profiles').doc(profileId).remove();
   return ok({ deleted: true });
@@ -1396,15 +1587,41 @@ async function handleProfileDelete(openid, data) {
 
 // 人员信息管理
 async function handlePersonList(openid, data) {
+  const { userId } = await getUserContext(openid);
   const res = await db
     .collection('persons')
-    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
+    .where(_.or([{ owner_user_id: userId }, { owner_openid: openid }, { _openid: openid }]))
     .orderBy('updated_at', 'desc')
     .get();
-  return ok(res.data || []);
+
+  const list = res.data || [];
+  // 兼容历史数据：补写 owner_openid/owner_user_id
+  const toBackfill = list
+    .filter(
+      (item) =>
+        item &&
+        item._id &&
+        (!item.owner_user_id || !item.owner_openid) &&
+        (item.owner_openid === openid || item._openid === openid)
+    )
+    .slice(0, 20);
+  if (toBackfill.length > 0) {
+    await Promise.all(
+      toBackfill.map((item) =>
+        db
+          .collection('persons')
+          .doc(item._id)
+          .update({ data: { owner_openid: openid, owner_user_id: userId } })
+          .catch(() => null)
+      )
+    );
+  }
+
+  return ok(list);
 }
 
 async function handlePersonCreate(openid, data) {
+  const { userId } = await getUserContext(openid);
   const name = ensureString(data?.name || '').trim();
   const category = ensureString(data?.category || '').trim();
   const idCard = ensureString(data?.id_card || '').trim();
@@ -1430,6 +1647,7 @@ async function handlePersonCreate(openid, data) {
   const addRes = await db.collection('persons').add({
     data: {
       owner_openid: openid,
+      owner_user_id: userId,
       name: name,
       category: category || null,
       id_card: idCard || null,
@@ -1453,9 +1671,10 @@ async function handlePersonUpdate(openid, data) {
   if (!personId) return fail('缺少person_id');
   if (!name) return fail('姓名不能为空');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('persons').doc(personId).get().catch(() => null);
   const person = doc?.data || null;
-  if (!isOwnedByOpenid(person, openid)) return fail('人员信息不存在');
+  if (!isOwnedByUser(person, userId, openid)) return fail('人员信息不存在');
 
   // 内容安全检查
   const sec = await msgSecCheck(name);
@@ -1478,6 +1697,8 @@ async function handlePersonUpdate(openid, data) {
       category: category || null,
       id_card: idCard || null,
       phone: phone || null,
+      owner_openid: openid,
+      owner_user_id: userId,
       updated_at: now
     }
   });
@@ -1490,9 +1711,10 @@ async function handlePersonDelete(openid, data) {
   const personId = ensureString(data?.person_id);
   if (!personId) return fail('缺少person_id');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('persons').doc(personId).get().catch(() => null);
   const person = doc?.data || null;
-  if (!isOwnedByOpenid(person, openid)) return fail('人员信息不存在');
+  if (!isOwnedByUser(person, userId, openid)) return fail('人员信息不存在');
 
   await db.collection('persons').doc(personId).remove();
   return ok({ deleted: true });
@@ -1500,12 +1722,20 @@ async function handlePersonDelete(openid, data) {
 
 // 分类管理
 async function handleCategoryList(openid, data) {
+  const { userId } = await getUserContext(openid);
   // 先获取用户自定义分类
-  const customRes = await db
+  let customRes = await db
     .collection('person_categories')
-    .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
+    .where({ owner_user_id: userId })
     .orderBy('created_at', 'asc')
     .get();
+  if (!customRes.data || customRes.data.length === 0) {
+    customRes = await db
+      .collection('person_categories')
+      .where(_.or([{ owner_openid: openid }, { _openid: openid }]))
+      .orderBy('created_at', 'asc')
+      .get();
+  }
   
   // 默认分类
   const defaultCategories = [
@@ -1522,10 +1752,33 @@ async function handleCategoryList(openid, data) {
     ...(customRes.data || []).map(cat => ({ ...cat, id: cat._id }))
   ];
 
+  // 兼容历史数据：补写 owner_openid/owner_user_id
+  const toBackfill = (customRes.data || [])
+    .filter(
+      (item) =>
+        item &&
+        item._id &&
+        (!item.owner_user_id || !item.owner_openid) &&
+        (item.owner_openid === openid || item._openid === openid)
+    )
+    .slice(0, 20);
+  if (toBackfill.length > 0) {
+    await Promise.all(
+      toBackfill.map((item) =>
+        db
+          .collection('person_categories')
+          .doc(item._id)
+          .update({ data: { owner_openid: openid, owner_user_id: userId } })
+          .catch(() => null)
+      )
+    );
+  }
+
   return ok(allCategories);
 }
 
 async function handleCategoryCreate(openid, data) {
+  const { userId } = await getUserContext(openid);
   const value = ensureString(data?.value || '').trim();
   const label = ensureString(data?.label || '').trim();
   const icon = ensureString(data?.icon || '').trim();
@@ -1534,17 +1787,14 @@ async function handleCategoryCreate(openid, data) {
   if (!label) return fail('分类名称不能为空');
 
   // 检查是否已存在
-  const [existingOwner, existingLegacy] = await Promise.all([
-    db.collection('person_categories').where({ owner_openid: openid, value: value }).limit(1).get(),
-    db.collection('person_categories').where({ _openid: openid, value: value }).limit(1).get()
-  ]);
-
-  if (
-    (existingOwner.data && existingOwner.data.length > 0) ||
-    (existingLegacy.data && existingLegacy.data.length > 0)
-  ) {
-    return fail('该分类已存在');
+  let existing = await db.collection('person_categories').where({ owner_user_id: userId, value: value }).limit(1).get();
+  if (!existing.data || existing.data.length === 0) {
+    existing = await db.collection('person_categories').where({ owner_openid: openid, value: value }).limit(1).get();
   }
+  if (!existing.data || existing.data.length === 0) {
+    existing = await db.collection('person_categories').where({ _openid: openid, value: value }).limit(1).get();
+  }
+  if (existing.data && existing.data.length > 0) return fail('该分类已存在');
 
   // 检查默认分类
   const defaultValues = ['self', 'family', 'child', 'couple', 'other'];
@@ -1559,6 +1809,7 @@ async function handleCategoryCreate(openid, data) {
   const addRes = await db.collection('person_categories').add({
     data: {
       owner_openid: openid,
+      owner_user_id: userId,
       value: value,
       label: label,
       icon: icon || null,
@@ -1580,9 +1831,10 @@ async function handleCategoryUpdate(openid, data) {
   if (!categoryId) return fail('缺少category_id');
   if (!label) return fail('分类名称不能为空');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
   const category = doc?.data || null;
-  if (!isOwnedByOpenid(category, openid)) return fail('分类不存在');
+  if (!isOwnedByUser(category, userId, openid)) return fail('分类不存在');
 
   if (category.is_default) {
     return fail('默认分类不能修改');
@@ -1596,6 +1848,8 @@ async function handleCategoryUpdate(openid, data) {
     data: {
       label: label,
       icon: icon || null,
+      owner_openid: openid,
+      owner_user_id: userId,
       updated_at: now
     }
   });
@@ -1608,21 +1862,23 @@ async function handleCategoryDelete(openid, data) {
   const categoryId = ensureString(data?.category_id);
   if (!categoryId) return fail('缺少category_id');
 
+  const { userId } = await getUserContext(openid);
   const doc = await db.collection('person_categories').doc(categoryId).get().catch(() => null);
   const category = doc?.data || null;
-  if (!isOwnedByOpenid(category, openid)) return fail('分类不存在');
+  if (!isOwnedByUser(category, userId, openid)) return fail('分类不存在');
 
   if (category.is_default) {
     return fail('默认分类不能删除');
   }
 
   // 检查是否有人员使用该分类
-  const [ownerPersonsRes, legacyPersonsRes] = await Promise.all([
+  const [byUserRes, ownerPersonsRes, legacyPersonsRes] = await Promise.all([
+    db.collection('persons').where({ owner_user_id: userId, category: category.value }).count(),
     db.collection('persons').where({ owner_openid: openid, category: category.value }).count(),
     db.collection('persons').where({ _openid: openid, category: category.value }).count()
   ]);
-  
-  if ((ownerPersonsRes.total || 0) + (legacyPersonsRes.total || 0) > 0) {
+
+  if ((byUserRes.total || 0) + (ownerPersonsRes.total || 0) + (legacyPersonsRes.total || 0) > 0) {
     return fail('该分类下还有人员，无法删除');
   }
 
@@ -1634,6 +1890,10 @@ async function route(action, openid, data) {
   switch (action) {
     case 'auth.login':
       return handleAuthLogin(openid, data);
+    case 'auth.ensure':
+      return handleAuthEnsure(openid, data);
+    case 'auth.bindPhone':
+      return handleAuthBindPhone(openid, data);
     case 'wish.analyze':
       return handleWishAnalyze(openid, data);
     case 'wish.optimize':

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, Textarea, Button, ScrollView } from '@tarojs/components'
 import Taro, { useDidShow, useShareAppMessage, useRouter } from '@tarojs/taro'
-import { authAPI, wishAPI, unlockAPI } from '../../utils/api'
+import { wishAPI, unlockAPI } from '../../utils/api'
+import { ensureLoginSilently, loginWithUserProfile } from '../../utils/auth'
 import { useAppStore } from '../../store'
 import type { AnalysisResult } from '../../types'
 import AnalysisModal from '../../components/AnalysisModal'
@@ -126,36 +127,20 @@ export default function Index() {
     
     setLoggingIn(true)
     try {
-      console.log('开始登录流程...')
-      
-      // 获取用户信息
-      console.log('正在获取用户信息...')
-      const userInfoRes = await Taro.getUserProfile({
-        desc: '用于完善用户资料'
-      })
-      console.log('用户信息获取成功:', userInfoRes.userInfo)
-      
-      // 调用登录接口（手机号授权改为可选，在云函数中处理）
-      console.log('正在调用登录接口...')
-      const response = await authAPI.login(userInfoRes.userInfo, undefined)
-      console.log('登录接口响应:', response)
-      
-      if (response.code === 0) {
-        setUser(response.data?.user || null)
+      const result = await loginWithUserProfile()
+      if (result.ok) {
+        setUser(result.user || null)
         Taro.showToast({ title: '登录成功', icon: 'success' })
-        console.log('登录成功，用户信息:', response.data?.user)
       } else {
-        console.error('登录失败，错误码:', response.code, '错误信息:', response.msg)
         Taro.showToast({ 
-          title: response.msg || '登录失败', 
+          title: result.msg || '登录失败', 
           icon: 'none',
           duration: 2000
         })
       }
     } catch (error: any) {
-      console.error('登录过程出错:', error)
-      const errorMsg = error.message || error.errMsg || '登录失败，请重试'
-      console.error('错误详情:', error)
+      console.error('登录失败:', error)
+      const errorMsg = error?.message || error?.errMsg || '登录失败，请重试'
       Taro.showToast({ 
         title: errorMsg, 
         icon: 'none',
@@ -183,32 +168,16 @@ export default function Index() {
     // 检查是否已登录
     const currentIsLoggedIn = useAppStore.getState().isLoggedIn
     if (!currentIsLoggedIn) {
-      // 防止同一个分享链接在多处触发时重复弹登录框
+      // 防止同一个分享链接在多处触发时重复触发无感登录
       if (shareUnlockLoginPromptedKeyRef.current === shareKey) return
       shareUnlockLoginPromptedKeyRef.current = shareKey
-      Taro.showModal({
-        title: '提示',
-        content: '需要登录后才能解锁内容，是否立即登录？',
-        success: async (res) => {
-          if (res.confirm) {
-            // 先保存解锁参数到 storage，登录成功后再执行
-            Taro.setStorageSync('bb_share_unlock', {
-              analysis_id: analysisId,
-              unlock_token: unlockToken
-            })
-            await handleLogin()
-            // 登录成功后，useDidShow 会再次触发，检查 storage 中的解锁参数
-            // 若登录未成功，放开标记，允许用户再次尝试
-            if (!useAppStore.getState().isLoggedIn) {
-              shareUnlockLoginPromptedKeyRef.current = null
-            }
-          } else {
-            // 用户取消登录时，放开标记，避免后续无法再次弹窗
-            shareUnlockLoginPromptedKeyRef.current = null
-          }
-        }
-      })
-      return
+      const ok = await ensureLoginSilently()
+      if (!ok) {
+        shareUnlockLoginPromptedKeyRef.current = null
+        Taro.showToast({ title: '登录失败，请稍后再试', icon: 'none', duration: 2000 })
+        return
+      }
+      shareUnlockLoginPromptedKeyRef.current = null
     }
 
     let keepProcessedKey = false
@@ -611,11 +580,8 @@ export default function Index() {
   })
 
   const handleAnalyze = async () => {
-    console.log('handleAnalyze 被调用', { wishText, isLoggedIn, analyzing })
-    
     // 检查是否正在分析中
     if (analyzing) {
-      console.log('正在分析中，忽略重复点击')
       return
     }
     
@@ -627,24 +593,14 @@ export default function Index() {
       return
     }
     
-    // 检查登录状态
+    // 无感登录：不弹授权框
     if (!isLoggedIn) {
-      console.log('用户未登录，显示登录提示')
-      Taro.showModal({
-        title: '提示',
-        content: '请先登录后再进行分析',
-        confirmText: '立即登录',
-        cancelText: '取消',
-        success: (res) => {
-          if (res.confirm) {
-            handleLogin()
-          }
-        }
-      })
-      return
+      const ok = await ensureLoginSilently()
+      if (!ok) {
+        Taro.showToast({ title: '登录失败，请稍后再试', icon: 'none', duration: 2000 })
+        return
+      }
     }
-    
-    console.log('开始分析愿望...', { wishText: finalWishText.substring(0, 50) + '...', deity: prefillDeity })
     
     // 如果使用的是默认文案且用户没有输入，更新 wishText 状态以便后续显示
     if (!wishText || !wishText.trim()) {
@@ -661,12 +617,9 @@ export default function Index() {
     setShareUnlockContext(null)
     
     try {
-      console.log('调用 wishAPI.analyze...')
       const response = await wishAPI.analyze(finalWishText, prefillDeity || '')
-      console.log('handleAnalyze - response:', JSON.stringify(response, null, 2))
       
       if (response.code === 0) {
-        console.log('分析成功，设置结果:', JSON.stringify(response.data, null, 2))
         setAnalysisResult(response.data)
         writeLastAnalysisCache({
           wish_text: finalWishText,
@@ -675,9 +628,7 @@ export default function Index() {
           unlocked: false,
           modal_visible: true
         })
-        console.log('结果已设置，弹窗应显示分析结果')
       } else {
-        console.error('分析失败，错误码:', response.code, '错误信息:', response.msg)
         Taro.showToast({ 
           title: response.msg || '分析失败，请重试', 
           icon: 'none',
@@ -686,12 +637,7 @@ export default function Index() {
         setShowModal(false)
       }
     } catch (error: any) {
-      console.error('handleAnalyze - 捕获到异常:', error)
-      console.error('错误详情:', {
-        message: error.message,
-        errMsg: error.errMsg,
-        stack: error.stack
-      })
+      console.error('分析异常:', error)
       
       // 提供更详细的错误信息
       let errorMsg = '分析失败，请重试'

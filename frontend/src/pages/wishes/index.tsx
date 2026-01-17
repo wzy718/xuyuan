@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { authAPI, todoAPI } from '../../utils/api'
+import { todoAPI } from '../../utils/api'
+import { ensureLoginSilently, loginWithUserProfile } from '../../utils/auth'
 import { useAppStore } from '../../store'
 import type { Wish } from '../../types'
 import WishEditorModal from '../../components/WishEditorModal'
@@ -34,16 +35,13 @@ export default function Wishes() {
     
     setLoggingIn(true)
     try {
-      const userInfoRes = await Taro.getUserProfile({
-        desc: '用于完善用户资料'
-      })
-      const response = await authAPI.login(userInfoRes.userInfo, null)
-      if (response.code === 0) {
-        setUser(response.data?.user || null)
+      const result = await loginWithUserProfile()
+      if (result.ok) {
+        setUser(result.user || null)
         Taro.showToast({ title: '登录成功', icon: 'success' })
         loadWishes()
       } else {
-        Taro.showToast({ title: response.msg || '登录失败', icon: 'none' })
+        Taro.showToast({ title: result.msg || '登录失败', icon: 'none' })
       }
     } catch (error: any) {
       Taro.showToast({ title: error.message || '登录失败', icon: 'none' })
@@ -53,9 +51,9 @@ export default function Wishes() {
   }
 
   const loadWishes = async () => {
-    // 使用 store 的最新状态，而不是闭包中的状态
-    const currentIsLoggedIn = useAppStore.getState().isLoggedIn
-    if (!currentIsLoggedIn) return
+    // 无感登录：不弹授权框
+    const ok = await ensureLoginSilently()
+    if (!ok) return
     setLoading(true)
     try {
       const response = await todoAPI.getList()
@@ -76,7 +74,7 @@ export default function Wishes() {
   }
 
   useDidShow(() => {
-    loadWishes()
+    void loadWishes()
     const prefill = Taro.getStorageSync('bb_prefill_wish')
     if (prefill?.wish_text) {
       setEditingWish(prefill)
@@ -93,8 +91,11 @@ export default function Wishes() {
 
   const handleSubmitWish = async (payload: Partial<Wish>) => {
     if (!isLoggedIn) {
-      Taro.showToast({ title: '请先登录', icon: 'none' })
-      return
+      const ok = await ensureLoginSilently()
+      if (!ok) {
+        Taro.showToast({ title: '登录失败，请稍后再试', icon: 'none' })
+        return
+      }
     }
     if (editingWishId) {
       const response = await todoAPI.update(editingWishId, payload)

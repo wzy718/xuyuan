@@ -8,31 +8,25 @@
 
 .guide-slide {
   height: 100%;
-  padding: 80rpx 36rpx;
+  padding: 0 40rpx 40rpx;
+  padding-top: calc(50vh - 400rpx);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
 }
 
-.guide-ornament {
-  font-size: 22rpx;
-  color: rgba(201, 169, 98, 0.7);
-  letter-spacing: 6rpx;
-  margin-bottom: 40rpx;
-}
-
 .guide-illustration {
-  width: 280rpx;
-  height: 280rpx;
+  width: 480rpx;
+  height: 480rpx;
   border-radius: 50%;
   border: 2rpx solid rgba(201, 169, 98, 0.4);
   background: rgba(255, 255, 255, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 40rpx;
+  margin-bottom: 50rpx;
   box-shadow: var(--bb-shadow);
 }
 
@@ -43,15 +37,18 @@
 }
 
 .guide-title {
-  font-size: 36rpx;
+  font-size: 40rpx;
   font-weight: 600;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
+  text-align: center;
 }
 
 .guide-desc {
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: var(--bb-muted);
-  line-height: 1.7;
+  line-height: 1.8;
+  padding: 0 40rpx;
+  text-align: center;
 }
 
 .guide-cta {

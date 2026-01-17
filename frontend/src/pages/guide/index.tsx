@@ -37,7 +37,6 @@ export default function Guide() {
         {slides.map((item, index) => (
           <SwiperItem key={item.title}>
             <View className="guide-slide">
-              <View className="guide-ornament">祥云纹理</View>
               <View className="guide-illustration">
                 <Image 
                   src={item.image} 

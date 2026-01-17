@@ -42,6 +42,14 @@ export const authAPI = {
       user_info: userInfo,
       phone_cloud_id: phoneCloudID
     })
+  },
+
+  async ensure() {
+    return callFunction<{ user: any }>('auth.ensure', {})
+  },
+
+  async bindPhone(payload: { phone_cloud_id?: string; phone_code?: string }) {
+    return callFunction<{ user: any }>('auth.bindPhone', payload)
   }
 }
 
@@ -174,4 +182,3 @@ export const categoryAPI = {
     return callFunction('category.delete', { category_id: categoryId })
   }
 }
-
